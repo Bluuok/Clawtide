@@ -8,12 +8,11 @@
  *   group chat  → Workspace (several groups may bind the same workspace)
  *   direct chat → a dedicated Runtime Session
  *   native thread (feishu topic / telegram forum) → its own Session
- * First占有 persists the session id; later replies reuse that context.
+ * First occupancy persists the session id; later replies reuse that context.
  */
 import type { AppDb } from './db.js';
 import type { Logger } from 'pino';
 import { randomBytes } from 'node:crypto';
-import { nowIso } from './time.js';
 import type {
   ChannelId,
   ImChannelAdapter,
