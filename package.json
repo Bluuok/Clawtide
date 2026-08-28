@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.4",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.4.1",
     "cron-parser": "^5.4.0",
     "hono": "^4.9.7",
@@ -27,6 +28,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.5.2",
     "@types/ws": "^8.18.1",
