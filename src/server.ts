@@ -9,15 +9,23 @@ import type { Logger } from 'pino';
 import type { AppConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { openDatabase, AppDb } from './db.js';
-import { createApp, type ServerDeps } from './web.js';
+import { createApp, type ServerDeps, type AppServices } from './web.js';
 import { WsHub, type WsAuthenticator } from './ws.js';
+import { AuthService } from './auth.js';
+import { LoginRateLimiter } from './rate-limit.js';
+import { UserStore } from './stores/users.js';
+import { WorkspaceStore } from './stores/workspaces.js';
+import { wsSessionAuthenticator } from './auth-context.js';
 
 export interface StartOptions {
   config: AppConfig;
   /** Test seam: inject an open database (skips migration on this path). */
   db?: AppDb;
   logger?: Logger;
+  /** Test seam: override the WS upgrade authenticator. */
   wsAuthenticator?: WsAuthenticator;
+  /** Test seam: fixed-rate limiter clock / disabled limiter. */
+  services?: AppServices;
 }
 
 export interface RunningServer {
@@ -26,6 +34,7 @@ export interface RunningServer {
   logger: Logger;
   app: ReturnType<typeof createApp>;
   ws: WsHub;
+  services: AppServices;
   port: number;
   /** Graceful shutdown: WS close → HTTP close → DB close. Idempotent. */
   stop(): Promise<void>;
@@ -36,7 +45,20 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   const logger = opts.logger ?? createLogger({ config });
   const db = opts.db ?? openDatabase({ config, logger });
 
-  const deps: ServerDeps = { config, db, logger };
+  // Service graph: auth service owns hashing/signing; stores own their
+  // statements; the WS authenticator reuses the same cookie chain as the
+  // HTTP middleware so upgrade-time and request-time auth cannot drift.
+  const services = opts.services ?? {
+    authService: new AuthService(db, config, logger.child({ component: 'auth' })),
+    userStore: new UserStore(db),
+    workspaceStore: new WorkspaceStore(db),
+    rateLimiter: new LoginRateLimiter(
+      config.AUTH_MAX_ATTEMPTS,
+      config.AUTH_LOCKOUT_MINUTES * 60_000,
+    ),
+  };
+
+  const deps: ServerDeps = { config, db, logger, services };
   const app = createApp(deps);
 
   // serve() creates the underlying node server; its returned handle IS that
@@ -48,7 +70,11 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   });
 
   const ws = new WsHub(
-    { config, logger, authenticator: opts.wsAuthenticator },
+    {
+      config,
+      logger,
+      authenticator: opts.wsAuthenticator ?? wsSessionAuthenticator(services.authService),
+    },
     logger.child({ component: 'ws' }),
   );
   ws.attach(server);
@@ -66,6 +92,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     logger,
     app,
     ws,
+    services,
     port,
     stop: async () => {
       if (stopping) return;
@@ -76,6 +103,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
         // Undici keep-alive sockets in tests would hold close() open forever.
         (server as unknown as Server).closeAllConnections();
       });
+      services.rateLimiter.stop();
       db.close();
       logger.info('server stopped');
     },

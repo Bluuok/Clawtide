@@ -2,28 +2,52 @@
  * Hono application assembly: middleware stack + route mounting. Transport
  * (listening socket, WS upgrade) lives in server.ts so tests can drive the
  * app directly.
+ *
+ * `env.incoming` carries the raw node request so auth code can read cookies /
+ * socket state outside Hono's abstraction (the WS authenticator shares it).
  */
 import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { IncomingMessage } from 'node:http';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
+import { ZodError } from 'zod';
 import type { Logger } from 'pino';
 import type { AppConfig } from './config.js';
 import type { AppDb } from './db.js';
 import { WebError, apiErrorBody } from './errors.js';
 import { appVersion } from './version.js';
 import type { HealthPayload } from '../shared/protocol.js';
+import type { SessionUser, AuthService } from './auth.js';
+import type { LoginRateLimiter } from './rate-limit.js';
+import type { UserStore } from './stores/users.js';
+import type { WorkspaceStore } from './stores/workspaces.js';
+import { sessionMiddleware } from './auth-context.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerWorkspaceRoutes } from './routes/workspaces.js';
+
+export interface AppServices {
+  authService: AuthService;
+  userStore: UserStore;
+  workspaceStore: WorkspaceStore;
+  rateLimiter: LoginRateLimiter;
+}
 
 export interface ServerDeps {
   config: AppConfig;
   db: AppDb;
   logger: Logger;
+  /** Auth services; absent in Loop-0-style tests that only need /healthz. */
+  services?: AppServices;
 }
 
 type AppEnv = {
   Variables: {
     requestId: string;
     logger: Logger;
+    user: SessionUser | undefined;
+    incoming: IncomingMessage;
+    config: AppConfig;
   };
 };
 
@@ -66,6 +90,15 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
     const requestId = crypto.randomUUID();
     c.set('requestId', requestId);
     c.set('logger', deps.logger.child({ requestId }));
+    c.set('config', deps.config);
+    // incoming: the raw node request, attached by the node-server adapter via
+    // a per-request property (see server.ts). app.request() tests without it
+    // get a stub — good enough for routes that never touch cookies.
+    c.set(
+      'incoming',
+      (c.env as { incoming?: IncomingMessage } | undefined)?.incoming ??
+        ({ headers: {}, socket: {} } as unknown as IncomingMessage),
+    );
     await next();
     c.header('X-Request-Id', requestId);
   });
@@ -96,6 +129,20 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
     return c.json(body);
   });
 
+  // --- Route families: auth (R19) + workspaces (R20) ------------------------
+  if (deps.services !== undefined) {
+    const svc = deps.services;
+    app.use('/auth/*', sessionMiddleware(svc.authService));
+    app.use('/workspaces', sessionMiddleware(svc.authService));
+    app.use('/workspaces/*', sessionMiddleware(svc.authService));
+    registerAuthRoutes(app, {
+      authService: svc.authService,
+      userStore: svc.userStore,
+      workspaceStore: svc.workspaceStore,
+      rateLimiter: svc.rateLimiter,
+    });
+    registerWorkspaceRoutes(app, { workspaceStore: svc.workspaceStore });
+  }
   // --- Error mapping -------------------------------------------------------
 
   app.notFound((c) => {
@@ -105,6 +152,16 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
 
   app.onError((err, c) => {
     const requestId = c.get('requestId');
+    if (err instanceof ZodError) {
+      return c.json(
+        apiErrorBody(
+          'validation_failed',
+          err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+          requestId,
+        ),
+        400,
+      );
+    }
     if (err instanceof WebError) {
       if (err.status >= 500) {
         c.get('logger').error({ err }, 'request failed');
