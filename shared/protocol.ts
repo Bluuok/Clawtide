@@ -20,9 +20,8 @@ export interface WsHelloPayload {
 }
 
 /** Client→server WS frames are typed by `type` with JSON payloads. */
-export interface WsClientFrame {
-  type: 'pong' | 'ping';
-}
+export type WsClientFrame =
+  { type: 'pong' | 'ping' } | { type: 'chat'; sessionId: string; content: string };
 
 /** Payload of `GET /healthz` (no auth: liveness only, no secrets). */
 export interface HealthPayload {
