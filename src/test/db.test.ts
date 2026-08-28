@@ -228,6 +228,63 @@ describe('v4 migration: profiles + runtime tables', () => {
   });
 });
 
+describe('v5 migration: scheduler tables', () => {
+  const seedTaskBase = (db: ReturnType<typeof openDatabase>['db']): void => {
+    db.prepare(
+      "INSERT INTO users (id, username, password_hash, role, created_at) VALUES ('u1', 'alice', 'h', 'member', '2026-01-01')",
+    ).run();
+    db.prepare(
+      "INSERT INTO workspaces (id, folder, jid, display_name, is_home, created_by, execution_mode, created_at) VALUES ('w1','f1','web:f1','n',0,'u1','host','t')",
+    ).run();
+    db.prepare(
+      "INSERT INTO scheduled_tasks (id, workspace_id, prompt, schedule_type, cron_expr, interval_seconds, run_at, context_mode, status, created_by, created_at) VALUES ('t1','w1','do it','interval',NULL,120,NULL,'isolated','active','u1','t')",
+    ).run();
+  };
+
+  it('creates scheduler tables; interval < 60 rejected by CHECK', () => {
+    const cfg = makeTestConfig();
+    const db = openDatabase({ config: cfg, logger: testLogger(), backupDisabled: true });
+    try {
+      seedTaskBase(db.db);
+      const insertRun = (id: string, occurrence: string) =>
+        db.db
+          .prepare(
+            `INSERT INTO task_runs (id, task_id, occurrence_key, trigger_type, status, attempt, available_at, notification_status, created_at)
+             VALUES (?, 't1', ?, 'scheduled', 'queued', 0, 't', 'pending', 't')`,
+          )
+          .run(id, occurrence);
+      insertRun('r1', 't1:2026-01-01T00:00:00.000Z');
+      // Same occurrence again → UNIQUE violation = materialization idempotency.
+      expect(() => insertRun('r2', 't1:2026-01-01T00:00:00.000Z')).toThrowError(
+        /UNIQUE constraint failed/,
+      );
+      // interval < 60 seconds violates the CHECK on scheduled_tasks.
+      expect(() =>
+        db.db
+          .prepare(
+            "INSERT INTO scheduled_tasks (id, workspace_id, prompt, schedule_type, interval_seconds, context_mode, status, created_by, created_at) VALUES ('t2','w1','x','interval',59,'isolated','active','u1','t')",
+          )
+          .run(),
+      ).toThrowError(/CHECK constraint failed/);
+      // interval >= 60 accepted.
+      db.db
+        .prepare(
+          "INSERT INTO scheduled_tasks (id, workspace_id, prompt, schedule_type, interval_seconds, context_mode, status, created_by, created_at) VALUES ('t3','w1','x','interval',60,'isolated','active','u1','t')",
+        )
+        .run();
+      // Run log history row lands.
+      db.db
+        .prepare(
+          "INSERT INTO task_run_logs (task_id, run_id, status, duration_ms, error, run_at) VALUES ('t1','r1','success',12,NULL,'t')",
+        )
+        .run();
+    } finally {
+      db.close();
+      cleanupDir(cfg.dataDir);
+    }
+  });
+});
+
 describe('pruneBackups', () => {
   it('keeps only the newest N backups', async () => {
     const { mkdirSync } = await import('node:fs');

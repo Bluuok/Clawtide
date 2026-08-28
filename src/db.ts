@@ -21,6 +21,7 @@ import { nowIso } from './time.js';
 import { MIGRATION_V2_USERS } from './migrations/002-users.js';
 import { MIGRATION_V3_WORKSPACES } from './migrations/003-workspaces.js';
 import { MIGRATION_V4_PROFILES_AND_RUNTIME } from './migrations/004-profiles-runtime.js';
+import { MIGRATION_V5_SCHEDULER } from './migrations/005-scheduler.js';
 
 export class MigrationError extends Error {
   constructor(
@@ -70,6 +71,7 @@ export const MIGRATIONS: readonly Migration[] = [
   MIGRATION_V2_USERS,
   MIGRATION_V3_WORKSPACES,
   MIGRATION_V4_PROFILES_AND_RUNTIME,
+  MIGRATION_V5_SCHEDULER,
 ];
 
 /**
