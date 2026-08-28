@@ -34,5 +34,15 @@ export function testLogger() {
 }
 
 export function cleanupDir(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // Windows: a still-open SQLite handle (WAL sidecar) can make the first
+    // rm fail with EPERM; one deferred retry covers the common race.
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Leave the temp dir; the OS cleans tmpdir eventually.
+    }
+  }
 }
