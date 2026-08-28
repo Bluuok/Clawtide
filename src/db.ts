@@ -18,6 +18,8 @@ import type { Database as SqliteDatabase, Statement } from 'better-sqlite3';
 import type { AppConfig } from './config.js';
 import type { Logger } from 'pino';
 import { nowIso } from './time.js';
+import { MIGRATION_V2_USERS } from './migrations/002-users.js';
+import { MIGRATION_V3_WORKSPACES } from './migrations/003-workspaces.js';
 
 export class MigrationError extends Error {
   constructor(
@@ -62,7 +64,11 @@ const MIGRATION_V1_SETTINGS: Migration = {
 };
 
 /** Ordered migration chain — append-only; never edit or reorder existing entries. */
-export const MIGRATIONS: readonly Migration[] = [MIGRATION_V1_SETTINGS];
+export const MIGRATIONS: readonly Migration[] = [
+  MIGRATION_V1_SETTINGS,
+  MIGRATION_V2_USERS,
+  MIGRATION_V3_WORKSPACES,
+];
 
 /**
  * Persisted web settings — the top layer of the config priority chain
