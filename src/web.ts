@@ -30,6 +30,9 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import { registerProfileRoutes } from './routes/profiles.js';
 import { registerChatRoutes } from './routes/chat.js';
+import { registerTaskRoutes } from './routes/tasks.js';
+import type { TaskStore } from './stores/tasks.js';
+import type { TaskScheduler } from './task-scheduler.js';
 
 export interface AppServices {
   authService: AuthService;
@@ -39,6 +42,8 @@ export interface AppServices {
   profileStore: AgentProfileStore;
   runtime: AgentRuntime;
   wsHub: WsHub;
+  taskStore: TaskStore;
+  scheduler: TaskScheduler;
 }
 
 export interface ServerDeps {
@@ -148,6 +153,8 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       '/profiles/*',
       '/drafts/*',
       '/chat/*',
+      '/tasks',
+      '/tasks/*',
     ]) {
       app.use(prefix, auth);
     }
@@ -164,6 +171,11 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       workspaceStore: svc.workspaceStore,
       profileStore: svc.profileStore,
       wsHub: svc.wsHub,
+    });
+    registerTaskRoutes(app, {
+      taskStore: svc.taskStore,
+      workspaceStore: svc.workspaceStore,
+      scheduler: svc.scheduler,
     });
   }
   // --- Error mapping -------------------------------------------------------

@@ -9,11 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { openDatabase } from '../db.js';
-import {
-  TaskScheduler,
-  type ScheduledTaskRow,
-  type TaskRunRow,
-} from '../task-scheduler.js';
+import { TaskScheduler, type ScheduledTaskRow, type TaskRunRow } from '../task-scheduler.js';
 import { makeTestConfig, testLogger, cleanupDir } from '../test-support/harness.js';
 import { pino } from 'pino';
 
@@ -69,7 +65,9 @@ function seedTask(
        VALUES (?, 'ws1', 'check inventory', ?, NULL, ?, ?, ?, ?, 'u1', ?)`,
     )
     .run(id, scheduleType, intervalSeconds, runAt, 'isolated', status, createdAt);
-  return ctx.db.db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id) as ScheduledTaskRow;
+  return ctx.db.db
+    .prepare('SELECT * FROM scheduled_tasks WHERE id = ?')
+    .get(id) as ScheduledTaskRow;
 }
 
 function scheduler(ctx: Ctx, opts?: { now?: () => number; executeRun?: never }): TaskScheduler {
@@ -105,7 +103,9 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       expect(aWon).toBeDefined();
       expect(bWon).toBeUndefined();
 
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.status).toBe('running');
       expect(row.attempt).toBe(1);
       expect(row.lease_owner).toBe(schedA.ownerId);
@@ -131,7 +131,9 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       // Fresh lease, mid-flight: attacker's claim must lose.
       advance(ctx, 60_000);
       expect(attacker.claimOne(run.id)).toBeUndefined();
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.lease_owner).toBe(holder.ownerId);
     } finally {
       ctx.db.close();
@@ -155,10 +157,14 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       // retry_wait is available again after backoff... backoff is 1s·2^0 = 1s.
       advance(ctx, 2_000);
 
-      const stale = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const stale = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(stale.status).toBe('retry_wait');
       expect(second.claimOne(stale.id)).toBeDefined();
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.lease_owner).toBe(second.ownerId);
       expect(row.attempt).toBe(2);
     } finally {
@@ -194,7 +200,9 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       // original holder alone could finalize it. Either the holder's own
       // finish() won (status success) or an intervening failExpiredStartedTaskRuns
       // sweep took the row first (failed). Either way the row is TERMINAL.
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(['success', 'failed']).toContain(row.status);
       expect(final === 'success' || final === 'failed' || final === undefined).toBe(true);
 
@@ -204,7 +212,11 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       advance(ctx, 60_000);
       const outsider = new TaskScheduler({ db: ctx.db, logger: silent, now: () => ctx.nowMs });
       expect(outsider.claimOne(run.id)).toBeUndefined();
-      const still = (ctx.db.db.prepare('SELECT status FROM task_runs WHERE id = ?').get(run.id) as { status: string }).status;
+      const still = (
+        ctx.db.db.prepare('SELECT status FROM task_runs WHERE id = ?').get(run.id) as {
+          status: string;
+        }
+      ).status;
       expect(still).toBe(row.status);
     } finally {
       ctx.db.close();
@@ -219,21 +231,37 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       const s = scheduler(ctx);
       s.insertRun('task1', 'k1', 'scheduled', new Date(ctx.nowMs).toISOString());
       s.insertRun('task1', 'k2', 'scheduled', new Date(ctx.nowMs).toISOString());
-      const r1 = ctx.db.db.prepare("SELECT * FROM task_runs WHERE occurrence_key = 'k1'").get() as TaskRunRow;
-      const r2 = ctx.db.db.prepare("SELECT * FROM task_runs WHERE occurrence_key = 'k2'").get() as TaskRunRow;
+      const r1 = ctx.db.db
+        .prepare("SELECT * FROM task_runs WHERE occurrence_key = 'k1'")
+        .get() as TaskRunRow;
+      const r2 = ctx.db.db
+        .prepare("SELECT * FROM task_runs WHERE occurrence_key = 'k2'")
+        .get() as TaskRunRow;
       const c1 = s.claimOne(r1.id);
       const c2 = s.claimOne(r2.id);
       expect(c1).toBeDefined();
       expect(c2).toBeDefined();
       // c1 truly started; c2 claimed but never started.
       ctx.db.db
-        .prepare("UPDATE task_runs SET started_at = ? WHERE id = ?")
+        .prepare('UPDATE task_runs SET started_at = ? WHERE id = ?')
         .run(new Date(ctx.nowMs).toISOString(), r1.id);
       advance(ctx, 11 * 60_000);
       expect(s.failExpiredStartedTaskRuns()).toBe(1);
-      expect((ctx.db.db.prepare('SELECT status FROM task_runs WHERE id = ?').get(r1.id) as { status: string }).status).toBe('failed');
+      expect(
+        (
+          ctx.db.db.prepare('SELECT status FROM task_runs WHERE id = ?').get(r1.id) as {
+            status: string;
+          }
+        ).status,
+      ).toBe('failed');
       // r2 (unstarted) is untouched by the sweep — it belongs to the claim path.
-      expect((ctx.db.db.prepare('SELECT status FROM task_runs WHERE id = ?').get(r2.id) as { status: string }).status).toBe('running');
+      expect(
+        (
+          ctx.db.db.prepare('SELECT status FROM task_runs WHERE id = ?').get(r2.id) as {
+            status: string;
+          }
+        ).status,
+      ).toBe('running');
       // ...and remains reclaimable via the claim's second branch.
       const other = new TaskScheduler({ db: ctx.db, logger: silent, now: () => ctx.nowMs });
       expect(other.claimOne(r2.id)).toBeDefined();
@@ -296,7 +324,7 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
       expect(s.insertRun('task1', `task1:${iso}`, 'scheduled', iso)).toBe(true);
       expect(s.insertRun('task1', `task1:${iso}`, 'scheduled', iso)).toBe(false);
       const rows = ctx.db.db
-        .prepare("SELECT * FROM task_runs WHERE occurrence_key = ?")
+        .prepare('SELECT * FROM task_runs WHERE occurrence_key = ?')
         .all(`task1:${iso}`);
       expect(rows).toHaveLength(1);
     } finally {
@@ -308,7 +336,9 @@ describe('R14 claim semantics (single conditional UPDATE, changes() verdict)', (
   it('interval < 60 is rejected by the CHECK at the store boundary', () => {
     const ctx = makeCtx();
     try {
-      expect(() => seedTask(ctx, { intervalSeconds: 59 })).toThrowError(/CHECK constraint failed/);
+      expect(() => seedTask(ctx, { intervalSeconds: 59 })).toThrowError(
+        /CHECK constraint failed/,
+      );
     } finally {
       ctx.db.close();
       cleanupDir(ctx.config.dataDir);
@@ -387,7 +417,9 @@ describe('R14 materialization + recovery', () => {
       // Dead process never called start. New process recovers:
       const fresh = new TaskScheduler({ db: ctx.db, logger: silent, now: () => ctx.nowMs });
       fresh.recoverOnStart();
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.status).toBe('retry_wait');
       expect(row.lease_owner).toBeNull();
     } finally {
@@ -430,7 +462,9 @@ describe('R14 materialization + recovery', () => {
       const winner = ca ?? cb;
       await (ca !== undefined ? a.runClaimed(ca!) : b.runClaimed(cb!));
       expect(winners).toHaveLength(1);
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(winner!.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(winner!.id) as TaskRunRow;
       expect(row.status).toBe('success');
       // attempt == 1 proves no double-claim ever bumped it twice.
       expect(row.attempt).toBe(1);
@@ -459,7 +493,9 @@ describe('R14 run lifecycle', () => {
       const claimed = s.claimOne(run.id)!;
       const final = await s.runClaimed(claimed);
       expect(final).toBe('success');
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.status).toBe('success');
       expect(row.result).toBe('inventory checked');
       expect(row.finished_at).not.toBeNull();
@@ -494,7 +530,9 @@ describe('R14 run lifecycle', () => {
         .get() as TaskRunRow;
       const final = await s.runClaimed(s.claimOne(run.id)!);
       expect(final).toBe('failed');
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.status).toBe('failed');
       expect(row.error).toContain('agent turn exploded');
     } finally {
@@ -517,7 +555,9 @@ describe('R14 run lifecycle', () => {
       advance(ctx, 11 * 60_000);
       const final = await s.runClaimed(claimed);
       expect(final).toBeUndefined();
-      const row = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const row = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(row.status).toBe('retry_wait');
       // attempt is 1 after the claim's increment, so the delay uses
       // 1s·2^attempt = 2s (spec §6.2.6: min(60s, 1s·2^(attempt−1)) with
@@ -541,7 +581,9 @@ describe('R14 run lifecycle', () => {
       expect(second.queued).toBe(true);
       expect(second.runId).toBe(first.runId);
       const rows = ctx.db.db
-        .prepare("SELECT * FROM task_runs WHERE task_id = 'task1' AND trigger_type = 'immediate'")
+        .prepare(
+          "SELECT * FROM task_runs WHERE task_id = 'task1' AND trigger_type = 'immediate'",
+        )
         .all();
       expect(rows).toHaveLength(1);
     } finally {
@@ -559,7 +601,9 @@ describe('R14 run lifecycle', () => {
       // Pausing after materialization cancels queued work.
       seedTask(ctx, { id: 'task2' });
       s.insertRun('task2', 'task2:slot1', 'scheduled', new Date(ctx.nowMs).toISOString());
-      ctx.db.db.prepare("UPDATE scheduled_tasks SET status = 'paused' WHERE id = 'task2'").run();
+      ctx.db.db
+        .prepare("UPDATE scheduled_tasks SET status = 'paused' WHERE id = 'task2'")
+        .run();
       s.materializeDue();
       // cancellation helper (used by the pause route):
       ctx.db.db
@@ -567,7 +611,9 @@ describe('R14 run lifecycle', () => {
           "UPDATE task_runs SET status = 'cancelled', finished_at = ?, error = 'task paused or deleted' WHERE task_id = ? AND status IN ('queued','retry_wait')",
         )
         .run(new Date(ctx.nowMs).toISOString(), 'task2');
-      const row = ctx.db.db.prepare("SELECT * FROM task_runs WHERE occurrence_key = 'task2:slot1'").get() as TaskRunRow;
+      const row = ctx.db.db
+        .prepare("SELECT * FROM task_runs WHERE occurrence_key = 'task2:slot1'")
+        .get() as TaskRunRow;
       expect(row.status).toBe('cancelled');
     } finally {
       ctx.db.close();
@@ -641,7 +687,9 @@ describe('R14 run lifecycle', () => {
         .get() as TaskRunRow;
       await s.runClaimed(s.claimOne(run.id)!);
       // After a successful run the run is success + notification pending.
-      const after = ctx.db.db.prepare('SELECT * FROM task_runs WHERE id = ?').get(run.id) as TaskRunRow;
+      const after = ctx.db.db
+        .prepare('SELECT * FROM task_runs WHERE id = ?')
+        .get(run.id) as TaskRunRow;
       expect(after.notification_status).toBe('pending');
       expect(after.status).toBe('success');
     } finally {

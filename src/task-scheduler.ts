@@ -289,14 +289,14 @@ export class TaskScheduler {
     // then schedule forward. once tasks that were missed while down still run.
     if (task.schedule_type === 'once') {
       if (task.run_at !== null && task.run_at <= nowStr) {
-        if (this.insertRun(task.id, `${task.id}:${task.run_at}`, 'scheduled', nowStr)) created += 1;
+        if (this.insertRun(task.id, `${task.id}:${task.run_at}`, 'scheduled', nowStr))
+          created += 1;
       }
       return created;
     }
     if (task.schedule_type === 'interval') {
       const last = this.stmtLatestRun.get(task.id) as
-        | (TaskRunRow & { available_at: string })
-        | undefined;
+        (TaskRunRow & { available_at: string }) | undefined;
       const intervalMs = (task.interval_seconds ?? 0) * 1000;
       if (intervalMs <= 0) return 0;
       // Find the previous scheduled slot: if a prior run exists, its slot is
@@ -339,7 +339,12 @@ export class TaskScheduler {
     const next = this.nextCronAt(task.cron_expr, nowMs);
     if (next !== null && next <= nowMs) {
       if (
-        this.insertRun(task.id, `${task.id}:${new Date(next).toISOString()}`, 'scheduled', nowStr)
+        this.insertRun(
+          task.id,
+          `${task.id}:${new Date(next).toISOString()}`,
+          'scheduled',
+          nowStr,
+        )
       )
         created += 1;
     }
@@ -347,9 +352,9 @@ export class TaskScheduler {
   }
 
   private runIdForKey(key: string): string {
-    const row = this.deps.db.db.prepare('SELECT id FROM task_runs WHERE occurrence_key = ?').get(key) as
-      | { id: string }
-      | undefined;
+    const row = this.deps.db.db
+      .prepare('SELECT id FROM task_runs WHERE occurrence_key = ?')
+      .get(key) as { id: string } | undefined;
     return row?.id ?? key;
   }
 
@@ -506,7 +511,13 @@ export class TaskScheduler {
         UPDATE task_runs SET status = 'failed', finished_at = ?, error = ?
         WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_token = ?
       `);
-      failed.run(nowStr, `${reason}; exceeded MAX_SAFE_PRESTART_ATTEMPTS`, run.id, this.owner, run.lease_token);
+      failed.run(
+        nowStr,
+        `${reason}; exceeded MAX_SAFE_PRESTART_ATTEMPTS`,
+        run.id,
+        this.owner,
+        run.lease_token,
+      );
       this.writeLog(run.task_id, run.id, 'failed', null, 'max safe prestart attempts exceeded');
       return;
     }
@@ -560,7 +571,10 @@ export class TaskScheduler {
         // working immediately. The executor observes the abort via its own
         // cancellation path; this holder must not write again.
         this.stopHeartbeat(runId);
-        this.deps.logger.warn({ runId, owner: this.owner }, 'lease renewal failed; aborting run');
+        this.deps.logger.warn(
+          { runId, owner: this.owner },
+          'lease renewal failed; aborting run',
+        );
       }
     }, HEARTBEAT_INTERVAL_MS);
     timer.unref?.();
@@ -680,7 +694,10 @@ export class TaskScheduler {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.stmtNotifyFail.run(row.id, this.owner);
-        this.deps.logger.warn({ runId: row.id, err: message }, 'notification delivery failed; will retry');
+        this.deps.logger.warn(
+          { runId: row.id, err: message },
+          'notification delivery failed; will retry',
+        );
       }
     }
   }
@@ -692,7 +709,14 @@ export class TaskScheduler {
     durationMs: number | null,
     error: string | null,
   ): void {
-    this.stmtLog.run(taskId, runId, status, durationMs, error, new Date(this.now()).toISOString());
+    this.stmtLog.run(
+      taskId,
+      runId,
+      status,
+      durationMs,
+      error,
+      new Date(this.now()).toISOString(),
+    );
   }
 
   // ---- run/task read surface (console) --------------------------------------------

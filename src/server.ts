@@ -18,6 +18,8 @@ import { WorkspaceStore } from './stores/workspaces.js';
 import { AgentProfileStore } from './stores/agent-profiles.js';
 import { AgentRuntime, toStreamEventEnvelope, type TurnExecutor } from './agent-runtime.js';
 import { buildSystemPrompt } from './prompt-plan.js';
+import { TaskStore } from './stores/tasks.js';
+import { TaskScheduler } from './task-scheduler.js';
 import { wsSessionAuthenticator } from './auth-context.js';
 import { canAccessGroup } from './rbac.js';
 
@@ -30,6 +32,13 @@ export interface StartOptions {
   wsAuthenticator?: WsAuthenticator;
   /** Test seam: replace the SDK turn executor while assembling the runtime. */
   executeTurn?: TurnExecutor;
+  /** Test seam: replace the task-run executor (defaults to the runtime). */
+  taskExecutor?: (
+    run: Parameters<TaskScheduler['runClaimed']>[0],
+    task: unknown,
+  ) => Promise<string>;
+  /** Test seam: don't auto-start the scheduler pump loop (tests drive pumps manually). */
+  schedulerAutoStart?: boolean;
 }
 
 export interface RunningServer {
@@ -63,6 +72,31 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     logger: logger.child({ component: 'agent-runtime' }),
     apiKey: process.env.ANTHROPIC_API_KEY,
     executeTurn: opts.executeTurn,
+  });
+
+  // ---- R14 scheduler -------------------------------------------------------
+  // Task execution lands on the same runtime path as chat turns: an isolated
+  // context gets a fresh session, a group context reuses the workspace's most
+  // recent session. Without an API key the turn fails loudly (error event) —
+  // the run row then records the failure, never a fake success.
+  const taskStore = new TaskStore(db);
+  const scheduler = new TaskScheduler({
+    db,
+    logger: logger.child({ component: 'task-scheduler' }),
+    executeRun: opts.taskExecutor
+      ? async (run, task) => opts.taskExecutor!(run, task)
+      : async (run, task) => {
+          const session =
+            task.context_mode === 'group'
+              ? (runtime.sessionsForWorkspace(task.workspace_id).at(-1) ??
+                runtime.createSession({ workspaceId: task.workspace_id }))
+              : runtime.createSession({ workspaceId: task.workspace_id });
+          let finalText = '';
+          await runtime.sendMessage(session, task.prompt, (event) => {
+            if (event.type === 'assistant_text') finalText += event.text;
+          });
+          return finalText;
+        },
   });
 
   // The WS hub exists before the app so the chat frame handler can reach the
@@ -121,6 +155,8 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     rateLimiter,
     runtime,
     wsHub,
+    taskStore,
+    scheduler,
   };
 
   const deps: ServerDeps = { config, db, logger, services };
@@ -141,6 +177,11 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   const port = typeof address === 'object' && address !== null ? address.port : config.PORT;
   logger.info({ host: config.HOST, port }, 'server listening');
 
+  // Startup recovery + pump loop. Tests that drive pumps manually disable the
+  // auto-start; recovery (releasing dead claims) is unconditional.
+  scheduler.recoverOnStart();
+  if (opts.schedulerAutoStart !== false) scheduler.start();
+
   let stopping = false;
   return {
     config,
@@ -153,6 +194,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     stop: async () => {
       if (stopping) return;
       stopping = true;
+      scheduler.stop();
       await wsHub.close();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
