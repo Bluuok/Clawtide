@@ -85,16 +85,21 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     logger: logger.child({ component: 'task-scheduler' }),
     executeRun: opts.taskExecutor
       ? async (run, task) => opts.taskExecutor!(run, task)
-      : async (run, task) => {
+      : async (_run, task) => {
           const session =
             task.context_mode === 'group'
               ? (runtime.sessionsForWorkspace(task.workspace_id).at(-1) ??
                 runtime.createSession({ workspaceId: task.workspace_id }))
               : runtime.createSession({ workspaceId: task.workspace_id });
           let finalText = '';
+          let failure: string | undefined;
           await runtime.sendMessage(session, task.prompt, (event) => {
             if (event.type === 'assistant_text') finalText += event.text;
+            if (event.type === 'error') failure = event.message;
           });
+          // A failed turn (not configured, SDK error, max turns) must surface
+          // as a failed RUN — recording success here would be a fake success.
+          if (failure !== undefined) throw new Error(failure);
           return finalText;
         },
   });
