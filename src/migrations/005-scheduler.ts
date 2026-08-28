@@ -45,7 +45,7 @@ export const MIGRATION_V5_SCHEDULER: Migration = {
         attempt       INTEGER NOT NULL DEFAULT 0,
         available_at  TEXT NOT NULL,
         lease_owner   TEXT,
-        lease_token   INTEGER,
+        lease_token   INTEGER NOT NULL DEFAULT 0,
         lease_expires_at TEXT,
         started_at    TEXT,
         finished_at   TEXT,
