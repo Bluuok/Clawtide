@@ -1,7 +1,7 @@
 /**
- * Server assembly: open DB (migrations run here) → build Hono app → listen →
- * attach WS hub. Returns a handle so tests and index.ts share one boot path;
- * src/index.ts is only env wiring around this module.
+ * Server assembly: open DB (migrations run here) → build service graph →
+ * construct WS hub → build Hono app (routes use the services) → listen →
+ * attach hub + WS chat wiring. Returns a handle shared by tests and index.ts.
  */
 import type { Server } from 'node:http';
 import { serve, type ServerType } from '@hono/node-server';
@@ -15,7 +15,11 @@ import { AuthService } from './auth.js';
 import { LoginRateLimiter } from './rate-limit.js';
 import { UserStore } from './stores/users.js';
 import { WorkspaceStore } from './stores/workspaces.js';
+import { AgentProfileStore } from './stores/agent-profiles.js';
+import { AgentRuntime, toStreamEventEnvelope, type TurnExecutor } from './agent-runtime.js';
+import { buildSystemPrompt } from './prompt-plan.js';
 import { wsSessionAuthenticator } from './auth-context.js';
+import { canAccessGroup } from './rbac.js';
 
 export interface StartOptions {
   config: AppConfig;
@@ -24,8 +28,8 @@ export interface StartOptions {
   logger?: Logger;
   /** Test seam: override the WS upgrade authenticator. */
   wsAuthenticator?: WsAuthenticator;
-  /** Test seam: fixed-rate limiter clock / disabled limiter. */
-  services?: AppServices;
+  /** Test seam: replace the SDK turn executor while assembling the runtime. */
+  executeTurn?: TurnExecutor;
 }
 
 export interface RunningServer {
@@ -45,17 +49,78 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   const logger = opts.logger ?? createLogger({ config });
   const db = opts.db ?? openDatabase({ config, logger });
 
-  // Service graph: auth service owns hashing/signing; stores own their
-  // statements; the WS authenticator reuses the same cookie chain as the
-  // HTTP middleware so upgrade-time and request-time auth cannot drift.
-  const services = opts.services ?? {
-    authService: new AuthService(db, config, logger.child({ component: 'auth' })),
-    userStore: new UserStore(db),
-    workspaceStore: new WorkspaceStore(db),
-    rateLimiter: new LoginRateLimiter(
-      config.AUTH_MAX_ATTEMPTS,
-      config.AUTH_LOCKOUT_MINUTES * 60_000,
-    ),
+  // ---- service graph ------------------------------------------------------
+  const authService = new AuthService(db, config, logger.child({ component: 'auth' }));
+  const userStore = new UserStore(db);
+  const workspaceStore = new WorkspaceStore(db);
+  const profileStore = new AgentProfileStore(db);
+  const rateLimiter = new LoginRateLimiter(
+    config.AUTH_MAX_ATTEMPTS,
+    config.AUTH_LOCKOUT_MINUTES * 60_000,
+  );
+  const runtime = new AgentRuntime({
+    db,
+    logger: logger.child({ component: 'agent-runtime' }),
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    executeTurn: opts.executeTurn,
+  });
+
+  // The WS hub exists before the app so the chat frame handler can reach the
+  // runtime; routes hold the same hub for stream fan-out.
+  const wsHub = new WsHub(
+    {
+      config,
+      logger,
+      authenticator: opts.wsAuthenticator ?? wsSessionAuthenticator(authService),
+      onChat: (userId, { sessionId, content }) => {
+        const session = runtime.sessionById(sessionId);
+        if (session === undefined) {
+          logger.warn({ userId, sessionId }, 'chat frame for unknown session dropped');
+          return;
+        }
+        const wsRow = workspaceStore.byId(session.workspace_id);
+        if (wsRow === undefined) return;
+        const actor = userStore.byId(userId);
+        if (actor === undefined) return;
+        // Same ownership gate as the HTTP surface: a foreign workspace's
+        // session executes nothing (R20), and no reply leaks the refusal.
+        if (
+          canAccessGroup(
+            { id: actor.id, role: actor.role },
+            wsRow,
+            workspaceStore.resolveSiblingHome,
+          ) !== 'allow'
+        ) {
+          logger.debug({ userId, sessionId }, 'chat frame denied by RBAC');
+          return;
+        }
+        const profile = session.profile_id
+          ? profileStore.byId(session.profile_id)
+          : profileStore.defaultFor(actor.id);
+        const opts = {
+          systemPrompt: profile !== undefined ? buildSystemPrompt(profile) : undefined,
+        };
+        void runtime.sendMessage(
+          session,
+          content,
+          (event) => {
+            wsHub.broadcastToUser(userId, toStreamEventEnvelope(event));
+          },
+          opts,
+        );
+      },
+    },
+    logger.child({ component: 'ws' }),
+  );
+
+  const services: AppServices = {
+    authService,
+    userStore,
+    workspaceStore,
+    profileStore,
+    rateLimiter,
+    runtime,
+    wsHub,
   };
 
   const deps: ServerDeps = { config, db, logger, services };
@@ -68,16 +133,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     hostname: config.HOST,
     port: config.PORT,
   });
-
-  const ws = new WsHub(
-    {
-      config,
-      logger,
-      authenticator: opts.wsAuthenticator ?? wsSessionAuthenticator(services.authService),
-    },
-    logger.child({ component: 'ws' }),
-  );
-  ws.attach(server);
+  wsHub.attach(server);
 
   await onceListening(server as unknown as Server);
 
@@ -91,13 +147,13 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     db,
     logger,
     app,
-    ws,
+    ws: wsHub,
     services,
     port,
     stop: async () => {
       if (stopping) return;
       stopping = true;
-      await ws.close();
+      await wsHub.close();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
         // Undici keep-alive sockets in tests would hold close() open forever.
@@ -134,11 +190,10 @@ export function installSignalHandlers(
   getServer: () => Promise<RunningServer> | RunningServer,
   logger: Logger,
 ): void {
-  let running: RunningServer | undefined;
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'shutting down');
     try {
-      running = await getServer();
+      const running = await getServer();
       await running.stop();
       process.exit(0);
     } catch (err) {

@@ -24,6 +24,31 @@
 | PATCH | `/workspaces/:id` | Cookie | 改名；越权 → 404 |
 | DELETE | `/workspaces/:id` | Cookie | Home 不可删（403/404） |
 
+## Profile（R15）
+
+| 方法 | 路径 | 认证 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/profiles` | Cookie | 我的 profile 列表（active） |
+| POST | `/profiles` | Cookie | 建 profile `{name, segments{identity,soul,agents,tools}, promptMode}`；首个=默认 |
+| GET | `/profiles/:id` | Cookie | 越权 404 |
+| PATCH | `/profiles/:id` | Cookie | 改 name/单段/promptMode（未触及段保留）；version+1 |
+| GET | `/profiles/:id/versions` | Cookie | 不可变版本历史 |
+| POST | `/profiles/:id/default` | Cookie | 设为默认（部分唯一索引保证单默认） |
+| POST | `/profiles/:id/restore` | Cookie | `{version}` 恢复=新版本 |
+| POST | `/drafts` | Cookie | 两阶段阶段一：`{draftJson}` → 返回 confirmationPhrase |
+| POST | `/drafts/:id/confirm` | Cookie | `{phrase}` 逐字确认发布；短语不符/过期即作废。**发布来源由会话推导，请求体 source 字段不被读取** |
+
+## Chat / Agent Runtime（Loop 2）
+
+| 方法 | 路径 | 认证 | 说明 |
+| --- | --- | --- | --- |
+| POST | `/chat/sessions` | Cookie | 建会话 `{workspaceId, profileId?}`（缺省用默认 profile） |
+| GET | `/chat/sessions` | Cookie | 可见会话列表（RBAC 过滤） |
+| GET | `/chat/sessions/:id/messages` | Cookie | 会话转写 |
+| POST | `/chat/sessions/:id/messages` | Cookie | HTTP 回合：顺带向调用方打开的 WS 连接流式广播 |
+
+WS `/ws` 认证后发 `{type:'chat', sessionId, content}` → 串行执行 → 流式 `StreamEvent`（`turn_started/assistant_text/tool_started/tool_finished/turn_finished/error`）按 user 广播。同一会话并发 turn 串行保序（`SerialQueue`）。工具调用落 `tool_events` 表。
+
 ## 系统
 
 | 方法 | 路径 | 认证 | 说明 |

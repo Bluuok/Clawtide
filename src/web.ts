@@ -22,15 +22,23 @@ import type { SessionUser, AuthService } from './auth.js';
 import type { LoginRateLimiter } from './rate-limit.js';
 import type { UserStore } from './stores/users.js';
 import type { WorkspaceStore } from './stores/workspaces.js';
+import type { AgentProfileStore } from './stores/agent-profiles.js';
+import type { AgentRuntime } from './agent-runtime.js';
+import type { WsHub } from './ws.js';
 import { sessionMiddleware } from './auth-context.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
+import { registerProfileRoutes } from './routes/profiles.js';
+import { registerChatRoutes } from './routes/chat.js';
 
 export interface AppServices {
   authService: AuthService;
   userStore: UserStore;
   workspaceStore: WorkspaceStore;
   rateLimiter: LoginRateLimiter;
+  profileStore: AgentProfileStore;
+  runtime: AgentRuntime;
+  wsHub: WsHub;
 }
 
 export interface ServerDeps {
@@ -92,8 +100,8 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
     c.set('logger', deps.logger.child({ requestId }));
     c.set('config', deps.config);
     // incoming: the raw node request, attached by the node-server adapter via
-    // a per-request property (see server.ts). app.request() tests without it
-    // get a stub — good enough for routes that never touch cookies.
+    // a per-request property. In app.request()-style tests the property is
+    // absent, so routes that never touch cookies still receive an empty object.
     c.set(
       'incoming',
       (c.env as { incoming?: IncomingMessage } | undefined)?.incoming ??
@@ -129,12 +137,20 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
     return c.json(body);
   });
 
-  // --- Route families: auth (R19) + workspaces (R20) ------------------------
+  // --- Route families: auth (R19) + workspaces (R20) + profiles (R15) + chat -
   if (deps.services !== undefined) {
     const svc = deps.services;
-    app.use('/auth/*', sessionMiddleware(svc.authService));
-    app.use('/workspaces', sessionMiddleware(svc.authService));
-    app.use('/workspaces/*', sessionMiddleware(svc.authService));
+    const auth = sessionMiddleware(svc.authService);
+    for (const prefix of [
+      '/auth/*',
+      '/workspaces',
+      '/workspaces/*',
+      '/profiles/*',
+      '/drafts/*',
+      '/chat/*',
+    ]) {
+      app.use(prefix, auth);
+    }
     registerAuthRoutes(app, {
       authService: svc.authService,
       userStore: svc.userStore,
@@ -142,6 +158,13 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       rateLimiter: svc.rateLimiter,
     });
     registerWorkspaceRoutes(app, { workspaceStore: svc.workspaceStore });
+    registerProfileRoutes(app, { profileStore: svc.profileStore });
+    registerChatRoutes(app, {
+      runtime: svc.runtime,
+      workspaceStore: svc.workspaceStore,
+      profileStore: svc.profileStore,
+      wsHub: svc.wsHub,
+    });
   }
   // --- Error mapping -------------------------------------------------------
 

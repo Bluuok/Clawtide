@@ -41,8 +41,26 @@ if (base) {
     if (f.trim()) files.add(f.trim());
   }
 }
+// Honor .prettierignore the same way the CLI does; prettier's programmatic
+// format() takes the file directly and would otherwise format ignored docs.
+const ignoreLines = (await import('node:fs'))
+  .readFileSync(path.join(repoRoot, '.prettierignore'), 'utf8')
+  .split('\n')
+  .map((l) => l.trim())
+  .filter((l) => l.length > 0 && !l.startsWith('#'));
+const isIgnored = (file) =>
+  ignoreLines.some(
+    (pat) => file.startsWith(pat.replace(/\/$/, '')) || file.split('/').includes(pat),
+  );
+
 const targets = [...files]
-  .filter((f) => exts.test(f) && !f.startsWith('data/') && existsSync(path.join(repoRoot, f)))
+  .filter(
+    (f) =>
+      exts.test(f) &&
+      !f.startsWith('data/') &&
+      !isIgnored(f) &&
+      existsSync(path.join(repoRoot, f)),
+  )
   .sort();
 
 const { format, resolveConfig } = await import('prettier');

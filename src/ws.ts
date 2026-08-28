@@ -30,6 +30,12 @@ export interface WsHubOptions {
   logger: Logger;
   /** Loop 1 installs the cookie-session authenticator; absent = reject all. */
   authenticator?: WsAuthenticator;
+  /**
+   * Chat-frame handler: invoked for `{ type: 'chat', sessionId, content }`
+   * frames from an authenticated connection. Loop 2 wires this to the agent
+   * runtime; streaming responses come back via broadcastToUser.
+   */
+  onChat?: (userId: string, payload: { sessionId: string; content: string }) => void;
 }
 
 interface HubConnection {
@@ -129,10 +135,17 @@ export class WsHub {
         log.debug('ws frame not json; ignored');
         return;
       }
-      if (frame.type === 'ping')
+      if (frame.type === 'ping') {
         socket.send(
           JSON.stringify({ type: 'pong', payload: null, ts: new Date().toISOString() }),
         );
+      } else if (frame.type === 'chat') {
+        if (auth.userId !== undefined && this.opts.onChat !== undefined) {
+          this.opts.onChat(auth.userId, { sessionId: frame.sessionId, content: frame.content });
+        } else {
+          log.debug({ type: frame.type }, 'chat frame dropped: no handler or no auth');
+        }
+      }
     });
     socket.on('close', () => {
       this.connections.delete(connectionId);
@@ -159,6 +172,16 @@ export class WsHub {
     const data = JSON.stringify(envelope);
     for (const conn of this.connections.values()) {
       if (conn.socket.readyState === conn.socket.OPEN) conn.socket.send(data);
+    }
+  }
+
+  /** Fan out an envelope to every connection of one authenticated user. */
+  broadcastToUser<T>(userId: string, envelope: WsEnvelope<T>): void {
+    const data = JSON.stringify(envelope);
+    for (const conn of this.connections.values()) {
+      if (conn.userId === userId && conn.socket.readyState === conn.socket.OPEN) {
+        conn.socket.send(data);
+      }
     }
   }
 
