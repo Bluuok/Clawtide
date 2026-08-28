@@ -175,6 +175,59 @@ describe('SettingsStore', () => {
   });
 });
 
+describe('v4 migration: profiles + runtime tables', () => {
+  it('creates R15 + runtime tables with the partial-unique default index', () => {
+    const cfg = makeTestConfig();
+    const db = openDatabase({ config: cfg, logger: testLogger(), backupDisabled: true });
+    try {
+      db.db
+        .prepare(
+          "INSERT INTO users (id, username, password_hash, role, created_at) VALUES ('u1', 'alice', 'h', 'member', '2026-01-01')",
+        )
+        .run();
+      const insertPartialDefault = (id: string): void => {
+        db.db
+          .prepare(
+            `INSERT INTO agent_profiles (id, owner_user_id, name, identity_prompt, soul_prompt, agents_prompt, tools_prompt, prompt_mode, version, identity_hash, is_default, status, created_at, updated_at)
+             VALUES (?, 'u1','n','','','','','append',1,'h',1,'active','t','t')`,
+          )
+          .run(id);
+      };
+      insertPartialDefault('p1');
+      expect(() => insertPartialDefault('p2')).toThrowError(/UNIQUE constraint failed/);
+
+      db.db
+        .prepare(
+          "INSERT INTO workspaces (id, folder, jid, display_name, is_home, created_by, execution_mode, created_at) VALUES ('w1','f1','web:f1','n',0,'u1','host','t')",
+        )
+        .run();
+      db.db
+        .prepare(
+          "INSERT INTO chat_threads (id, workspace_id, kind, title, created_at) VALUES ('t1', 'w1', 'direct', '', 't')",
+        )
+        .run();
+      db.db
+        .prepare(
+          "INSERT INTO agent_sessions (id, workspace_id, sdk_session_id, thread_id, profile_id, created_at, updated_at) VALUES ('s1','w1','uuid','t1',NULL,'t','t')",
+        )
+        .run();
+      db.db
+        .prepare(
+          "INSERT INTO chat_messages (id, thread_id, session_id, role, content, ts) VALUES ('m1','t1','s1','user','hi','t')",
+        )
+        .run();
+      db.db
+        .prepare(
+          "INSERT INTO tool_events (session_id, tool_name, input_json, output_json, ts) VALUES ('s1','bash','{}',NULL,'t')",
+        )
+        .run();
+    } finally {
+      db.close();
+      cleanupDir(cfg.dataDir);
+    }
+  });
+});
+
 describe('pruneBackups', () => {
   it('keeps only the newest N backups', async () => {
     const { mkdirSync } = await import('node:fs');
