@@ -18,6 +18,7 @@
     "start": "node dist/src/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.250",
     "@hono/node-server": "^1.14.4",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.4.1",
