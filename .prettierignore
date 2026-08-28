@@ -1,0 +1,7 @@
+# Operator-supplied documents and generated files stay outside the format gate.
+docs/
+package-lock.json
+data/
+dist/
+node_modules/
+coverage/
