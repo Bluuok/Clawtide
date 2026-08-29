@@ -4,13 +4,19 @@
   "private": true,
   "description": "Self-hosted multi-user AI digital-worker platform",
   "type": "module",
+  "workspaces": [
+    "web"
+  ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:web": "npm run dev --workspace clawtide-web",
     "build": "tsc -p tsconfig.build.json",
+    "build:web": "npm run build --workspace clawtide-web",
     "typecheck": "tsc --noEmit",
+    "typecheck:web": "npm run typecheck --workspace clawtide-web",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
