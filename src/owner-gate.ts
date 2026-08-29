@@ -48,7 +48,8 @@ export function checkOwnerGate(input: GateInput): GateVerdict {
   // depends on the audience mode.
   if (destructive) {
     return { action: 'silent_drop', reason: 'owner-required command from non-owner' };
-  }if (input.audienceMode === 'owner_only') {
+  }
+  if (input.audienceMode === 'owner_only') {
     return { action: 'silent_drop', reason: 'audience_mode=owner_only' };
   }
   return { action: 'execute' };
