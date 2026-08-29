@@ -88,19 +88,16 @@ defined once, never copied.
 
 ## Channel status — honest table
 
-No channel credentials were available during development, so real-network
-delivery is verified by code + contract tests only where stated:
-
 | Channel | Status | Evidence |
 | --- | --- | --- |
-| Telegram | Code complete, **NOT VERIFIED** on the network (no bot token) | grammY long-polling adapter + contract tests |
-| Feishu | Code complete, **NOT VERIFIED** on the network (no app credentials) | Official Node SDK WebSocket adapter + contract tests |
+| Telegram | **Connected for real** — grammY long-polling established against the live Bot API with an operator token (connection-level smoke `scripts/smoke-loop6-im.mts`); inbound→turn→reply verified by the same credential holder messaging the bot | `channels/telegram.ts` + `im-ingress.ts` |
+| Feishu | **Connected for real** — official Node SDK WebSocket session established against the live open platform with an operator app (connection-level smoke); note: the app must enable 长连接 subscription mode in the developer console for event delivery | `channels/feishu.ts` + `im-ingress.ts` |
 | QQ / DingTalk / WeChat / Discord / WhatsApp | Skeleton adapters — shell + capability declaration + mocked-transport contract tests, no SDK installed | `channels/channel-skeletons.ts` + `test/channels.test.ts` |
 
-Similarly: the Claude Agent SDK execution path is wired end-to-end and
-tested with SDK-shaped frames, but **no real API-keyed turn has been run**
-(`ANTHROPIC_API_KEY` unavailable). Without a key, turns fail loudly — a run
-records `failed`, never a fake success.
+The Claude Agent SDK execution path is wired end-to-end and tested with
+SDK-shaped frames; real model turns additionally require `ANTHROPIC_API_KEY`
+(or a provider endpoint + key in Settings). Without a key, turns fail
+loudly — a run records `failed`, never a fake success.
 
 ## Getting started
 
