@@ -22,6 +22,20 @@ import { TaskStore } from './stores/tasks.js';
 import { TaskScheduler } from './task-scheduler.js';
 import { wsSessionAuthenticator } from './auth-context.js';
 import { canAccessGroup } from './rbac.js';
+import { ImManager } from './im-manager.js';
+import { ImIngress, runtimeSessionAllocator } from './im-ingress.js';
+import { CredentialVault } from './vault.js';
+import { joinConfigDir } from './auth.js';
+import { TelegramAdapter } from './channels/telegram.js';
+import { FeishuAdapter } from './channels/feishu.js';
+import {
+  QQAdapter,
+  DingTalkAdapter,
+  WeChatAdapter,
+  DiscordAdapter,
+  WhatsAppAdapter,
+} from './channels/channel-skeletons.js';
+import type { ImChannelAdapter } from './im-channel.js';
 
 export interface StartOptions {
   config: AppConfig;
@@ -39,6 +53,11 @@ export interface StartOptions {
   ) => Promise<string>;
   /** Test seam: don't auto-start the scheduler pump loop (tests drive pumps manually). */
   schedulerAutoStart?: boolean;
+  /**
+   * Test seam: don't start IM channel adapters at boot (default: start every
+   * configured channel account; real networks only when credentials exist).
+   */
+  imAutoStart?: boolean;
 }
 
 export interface RunningServer {
@@ -180,7 +199,66 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     },
   };
 
-  const deps: ServerDeps = { config, db, logger, services };
+  // ---- R07 IM channels -----------------------------------------------------
+  // Adapters are constructed from persisted channel_accounts rows; skeleton
+  // channels have no transport and never start (loudly configured-less). Real
+  // adapters start only when credentials decrypt — a bad key is a boot error,
+  // not a silent no-op. Inbound flows through the admission chain (Owner Gate
+  // → mount → RBAC) onto the same runtime path as web/scheduler.
+  const vault = CredentialVault.open(joinConfigDir(config));
+  const imManager = new ImManager(
+    db,
+    logger.child({ component: 'im-manager' }),
+    runtimeSessionAllocator(runtime),
+  );
+  const imIngress = new ImIngress({
+    db,
+    logger,
+    manager: imManager,
+    runtime,
+    workspaceStore,
+    wsHub,
+  });
+  services.imManager = imManager;
+
+  const imAdapters: ImChannelAdapter[] = [];
+  const accountRows = db.db.prepare('SELECT * FROM channel_accounts').all() as Array<{
+    id: string;
+    user_id: string;
+    channel: string;
+    credentials_enc: Buffer | null;
+  }>;
+  for (const row of accountRows) {
+    let adapter: ImChannelAdapter | undefined;
+    if (row.channel === 'telegram' && row.credentials_enc !== null) {
+      adapter = new TelegramAdapter({
+        botToken: vault.decrypt(row.credentials_enc),
+        accountId: row.id,
+      });
+    } else if (row.channel === 'feishu' && row.credentials_enc !== null) {
+      const creds = JSON.parse(vault.decrypt(row.credentials_enc)) as {
+        appId: string;
+        appSecret: string;
+      };
+      adapter = new FeishuAdapter({
+        appId: creds.appId,
+        appSecret: creds.appSecret,
+        accountId: row.id,
+      });
+    } else if (row.channel === 'qq') adapter = new QQAdapter(null);
+    else if (row.channel === 'dingtalk') adapter = new DingTalkAdapter(null);
+    else if (row.channel === 'wechat') adapter = new WeChatAdapter(null);
+    else if (row.channel === 'discord') adapter = new DiscordAdapter(null);
+    else if (row.channel === 'whatsapp') adapter = new WhatsAppAdapter(null);
+    if (adapter === undefined) {
+      logger.warn({ channel: row.channel, accountId: row.id }, 'no credentials; adapter idle');
+      continue;
+    }
+    imManager.register(adapter);
+    imAdapters.push(adapter);
+  }
+
+  const deps: ServerDeps = { config, db, logger, services, vault };
   const app = createApp(deps);
 
   // serve() creates the underlying node server; its returned handle IS that
@@ -203,6 +281,21 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
   scheduler.recoverOnStart();
   if (opts.schedulerAutoStart !== false) scheduler.start();
 
+  // IM adapters start after listening: inbound can only arrive once the hub
+  // and runtime are live. Inbound is routed through the admission chain.
+  if (opts.imAutoStart !== false) {
+    for (const adapter of imAdapters) {
+      try {
+        await adapter.start(async (msg) => {
+          await imIngress.handleInbound(msg);
+        });
+        logger.info({ channel: adapter.channel }, 'im adapter started');
+      } catch (err) {
+        logger.error({ err, channel: adapter.channel }, 'im adapter failed to start');
+      }
+    }
+  }
+
   let stopping = false;
   return {
     config,
@@ -215,6 +308,9 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     stop: async () => {
       if (stopping) return;
       stopping = true;
+      for (const adapter of imAdapters) {
+        await adapter.stop().catch(() => undefined);
+      }
       scheduler.stop();
       await wsHub.close();
       await new Promise<void>((resolve) => {

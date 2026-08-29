@@ -21,6 +21,7 @@ import type { StreamEvent } from '../shared/stream.js';
 import type { WsEnvelope } from '../shared/protocol.js';
 import { SerialQueue } from './group-queue.js';
 import type { AgentSessionRow } from './stores/agent-sessions.js';
+import type { ProfileSegments, PromptMode } from './prompt-plan.js';
 
 /** Delegatable turn boundary — the real SDK by default; injectable for tests. */
 export type TurnExecutor = (params: {
@@ -84,6 +85,16 @@ export class AgentRuntime {
   sessionById(id: string): AgentSessionRow | undefined {
     return this.deps.db.db.prepare('SELECT * FROM agent_sessions WHERE id = ?').get(id) as
       AgentSessionRow | undefined;
+  }
+
+  /** Profile row by id (IM ingress assembles the system prompt from it). */
+  profileById(profileId: string): (ProfileSegments & { prompt_mode: PromptMode }) | undefined {
+    if (profileId === undefined) return undefined;
+    return this.deps.db.db
+      .prepare(
+        'SELECT identity_prompt, soul_prompt, agents_prompt, tools_prompt, prompt_mode FROM agent_profiles WHERE id = ?',
+      )
+      .get(profileId) as (ProfileSegments & { prompt_mode: PromptMode }) | undefined;
   }
 
   sessionsForWorkspace(workspaceId: string): AgentSessionRow[] {

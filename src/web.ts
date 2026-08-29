@@ -32,8 +32,11 @@ import { registerProfileRoutes } from './routes/profiles.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerTaskRoutes } from './routes/tasks.js';
 import { registerSettingsRoutes } from './routes/settings.js';
+import { registerChannelRoutes } from './routes/channels.js';
+import type { CredentialVault } from './vault.js';
 import type { TaskStore } from './stores/tasks.js';
 import type { TaskScheduler } from './task-scheduler.js';
+import type { ImManager } from './im-manager.js';
 
 export interface AppServices {
   authService: AuthService;
@@ -45,6 +48,8 @@ export interface AppServices {
   wsHub: WsHub;
   taskStore: TaskStore;
   scheduler: TaskScheduler;
+  /** IM adapter registry + mount resolution (R07). */
+  imManager?: ImManager;
   /** Re-applies the provider settings chain to the runtime deps. */
   refreshProvider?: () => void;
 }
@@ -55,6 +60,8 @@ export interface ServerDeps {
   logger: Logger;
   /** Auth services; absent in Loop-0-style tests that only need /healthz. */
   services?: AppServices;
+  /** Credential vault for the channel route family (present with services). */
+  vault?: CredentialVault;
 }
 
 type AppEnv = {
@@ -159,6 +166,8 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       '/tasks',
       '/tasks/*',
       '/settings/*',
+      '/channels',
+      '/channels/*',
     ]) {
       app.use(prefix, auth);
     }
@@ -183,6 +192,9 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       scheduler: svc.scheduler,
     });
     registerSettingsRoutes(app, { db: deps.db });
+    if (deps.vault !== undefined) {
+      registerChannelRoutes(app, { db: deps.db, vault: deps.vault });
+    }
   }
   // --- Error mapping -------------------------------------------------------
 

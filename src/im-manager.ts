@@ -60,6 +60,11 @@ export class ImManager {
     return this.adapters.get(channel);
   }
 
+  /** Registered adapters (smoke/diagnostic iteration over the registry). */
+  adaptersSnapshot(): Array<[ChannelId, ImChannelAdapter]> {
+    return [...this.adapters.entries()];
+  }
+
   registeredChannels(): ChannelId[] {
     return [...this.adapters.keys()];
   }
