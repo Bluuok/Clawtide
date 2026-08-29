@@ -1,6 +1,6 @@
-# API 概览（Loop 1 现状，持续增长）
+# API 概览（Loop 5 现状）
 
-当前路由直接以 `/auth`、`/workspaces` 为前缀（无 `/api` 层；待路由族增长时统一复核）。错误统一为 `{ error: { code, message, requestId? } }`。
+当前路由直接以 `/auth`、`/workspaces` 等为前缀（无 `/api` 层；路由族已定，保持现状）。错误统一为 `{ error: { code, message, requestId? } }`。
 
 ## 认证（R19）
 
@@ -54,6 +54,13 @@ WS `/ws` 认证后发 `{type:'chat', sessionId, content}` → 串行执行 → �
 | 方法 | 路径 | 认证 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/healthz` | 无 | 存活探针 `{ok, version, uptimeSeconds}` |
+
+## 设置（Loop 5）
+
+| 方法 | 路径 | 认证 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/settings/provider` | admin | `{provider: {baseUrl, configured}}`——**key 只写**：只回是否已配置，永不回显 |
+| PUT | `/settings/provider` | admin | `{baseUrl, apiKey?}`；空 baseUrl 清除自定义端点；不带 apiKey 字段保留已存 key。member = 403（角色闸），未登录 = 401 |
 
 ## 登录限流语义
 
