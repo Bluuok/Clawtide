@@ -31,6 +31,7 @@ import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import { registerProfileRoutes } from './routes/profiles.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerTaskRoutes } from './routes/tasks.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import type { TaskStore } from './stores/tasks.js';
 import type { TaskScheduler } from './task-scheduler.js';
 
@@ -44,6 +45,8 @@ export interface AppServices {
   wsHub: WsHub;
   taskStore: TaskStore;
   scheduler: TaskScheduler;
+  /** Re-applies the provider settings chain to the runtime deps. */
+  refreshProvider?: () => void;
 }
 
 export interface ServerDeps {
@@ -155,6 +158,7 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       '/chat/*',
       '/tasks',
       '/tasks/*',
+      '/settings/*',
     ]) {
       app.use(prefix, auth);
     }
@@ -171,12 +175,14 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       workspaceStore: svc.workspaceStore,
       profileStore: svc.profileStore,
       wsHub: svc.wsHub,
+      refreshProvider: svc.refreshProvider,
     });
     registerTaskRoutes(app, {
       taskStore: svc.taskStore,
       workspaceStore: svc.workspaceStore,
       scheduler: svc.scheduler,
     });
+    registerSettingsRoutes(app, { db: deps.db });
   }
   // --- Error mapping -------------------------------------------------------
 

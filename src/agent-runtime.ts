@@ -34,13 +34,24 @@ export interface RuntimeDeps {
   db: AppDb;
   logger: Logger;
   apiKey: string | undefined;
+  /**
+   * Optional Anthropic-compatible endpoint override. Read at each turn so a
+   * settings-page update takes effect without restart; server.ts keeps it
+   * fresh from the settings priority chain (persisted > env > SDK default).
+   */
+  baseUrl?: string | undefined;
   executeTurn?: TurnExecutor;
 }
 
 export class AgentRuntime {
   private readonly serial = new SerialQueue();
+  // Visible to the server assembly so the provider settings chain can keep
+  // `baseUrl` current without exposing every dep as mutable API.
+  readonly deps: RuntimeDeps;
 
-  constructor(private readonly deps: RuntimeDeps) {}
+  constructor(deps: RuntimeDeps) {
+    this.deps = deps;
+  }
 
   isConfigured(): boolean {
     return this.deps.apiKey !== undefined && this.deps.apiKey.length > 0;
@@ -141,6 +152,11 @@ export class AgentRuntime {
         env: {
           ANTHROPIC_API_KEY: this.deps.apiKey ?? '',
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+          // Anthropic-compatible endpoint override (settings chain); absent →
+          // the SDK's default endpoint is used.
+          ...(this.deps.baseUrl !== undefined && this.deps.baseUrl.length > 0
+            ? { ANTHROPIC_BASE_URL: this.deps.baseUrl }
+            : {}),
         },
         hooks: {
           PostToolUse: [

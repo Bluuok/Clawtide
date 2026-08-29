@@ -74,6 +74,18 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     executeTurn: opts.executeTurn,
   });
 
+  // Provider settings (MUST-lite): the settings page persists an
+  // Anthropic-compatible endpoint. Resolution order: persisted web settings >
+  // env > SDK default. Re-applied at turn time via onChat/HTTP route paths so
+  // a settings update takes effect without a restart.
+  const providerBaseUrl = (): string | undefined => {
+    const persisted = db.settings.get('provider.baseUrl');
+    if (persisted !== undefined && persisted.length > 0) return persisted;
+    const envBase = process.env.ANTHROPIC_BASE_URL;
+    return envBase !== undefined && envBase.length > 0 ? envBase : undefined;
+  };
+  runtime.deps.baseUrl = providerBaseUrl();
+
   // ---- R14 scheduler -------------------------------------------------------
   // Task execution lands on the same runtime path as chat turns: an isolated
   // context gets a fresh session, a group context reuses the workspace's most
@@ -139,6 +151,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
         const opts = {
           systemPrompt: profile !== undefined ? buildSystemPrompt(profile) : undefined,
         };
+        runtime.deps.baseUrl = providerBaseUrl();
         void runtime.sendMessage(
           session,
           content,
@@ -162,6 +175,9 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     wsHub,
     taskStore,
     scheduler,
+    refreshProvider: () => {
+      runtime.deps.baseUrl = providerBaseUrl();
+    },
   };
 
   const deps: ServerDeps = { config, db, logger, services };
