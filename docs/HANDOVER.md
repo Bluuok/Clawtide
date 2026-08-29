@@ -5,15 +5,15 @@
 
 ## 0. 一句话
 
-项目按 6 个 Loop 推进，每个 Loop 走 PLAN → IMPLEMENT → TEST → REVIEW → FIX → GATE，Gate 不过不进下一个。**Loop 0/1/2/3/4 已完成并推送到 GitHub，当前停在 Loop 5 门口（React Web 控制台 + 最终审查）。**
+项目按 6 个 Loop 推进，每个 Loop 走 PLAN → IMPLEMENT → TEST → REVIEW → FIX → GATE，Gate 不过不进下一个。**Loop 0–5 已全部完成并推送到 GitHub（React Web 控制台 + 最终审查 + README 均已交付），项目进入收尾维护状态。**
 
 ## 1. 当前真实状态（已验证）
 
-- 分支 `main`，工作树干净，`origin = https://github.com/bfjxke/Clawtide`，已全部推送（最新 `d4cf0e9`）。
-- 测试：**19 文件 / 140 用例全绿**；`typecheck`、`build`、`format:changed` 全过。
+- 分支 `main`，工作树干净，`origin = https://github.com/bfjxke/Clawtide`，已全部推送。
+- 测试：**20 文件 / 143 用例全绿**；`typecheck`、`typecheck:web`、`build`、`build:web`、`format:changed` 全过。
 - GitHub Actions CI 在每次 push 后跑通（install → format-changed → typecheck → vitest → build）。
 
-### 已完成的五个 Loop
+### 已完成的六个 Loop
 
 | Loop | 内容 | 对应模块 | 状态 |
 | --- | --- | --- | --- |
@@ -22,6 +22,7 @@
 | Loop 2 | Agent Runtime + R15 Profile | `agent-runtime.ts` `group-queue.ts` `prompt-plan.ts` + `stores/{agent-profiles,agent-sessions}.ts` + `routes/{profiles,chat}.ts` + `shared/stream.ts` + 迁移 v4 | ✅ 推送 |
 | Loop 3 | R14 调度器：物化 + 租约互斥 + 双分支过期 + 心跳 + 退避 + pump + 恢复 + 通知分离 | 迁移 v5 + `task-scheduler.ts` + `stores/tasks.ts` + `routes/tasks.ts` + `scripts/smoke-loop3.mts` | ✅ 推送 |
 | Loop 4 | R07 七渠道：统一抽象 + 能力矩阵 + mount 解析 + 真连 2 + 骨架 5 | `im-channel.ts` `im-manager.ts` + `channels/{telegram,feishu,skeleton,channel-skeletons}.ts` + grammy/@larksuiteoapi 依赖 | ✅ 推送 |
+| Loop 5 | Web 控制台（React 19 + Vite 7 + Tailwind 4，5 页面 + settings）+ settings 路由族 + 最终审查 + README + 冒烟脚本 | `web/`（npm workspace）+ `routes/settings.ts` + `scripts/smoke-loop5.mts` + README.md | ✅ 推送 |
 
 ### 已备好、留给 Loop 5 的接缝（不是半成品，是阶段边界）
 
@@ -37,32 +38,13 @@
 - **Claude Agent SDK 真执行**：无 `ANTHROPIC_API_KEY`。填 key 即实跑（接线 = `executeTurn ?? defaultExecutor`）；任务执行冒烟已验证「无 key 时 run 诚实记 failed，绝不假成功」。
 - **Telegram / 飞书真实网络连接**：适配器代码 + 能力矩阵 + 契约测试已就位，但没有 bot token / 飞书应用凭据，长轮询与 WS 长连从未拨过真实网络。README 必须写「已验证渠道 / 骨架渠道」诚实表格（QQ/钉钉/微信/Discord/WhatsApp = 骨架 + mock 传输契约测试，无 SDK）。
 
-## 2. 下次从哪里开始：**Loop 5 — React Web 控制台 + 最终审查**
+### Loop 5 交付记录（2026-08-29 完成）
 
-### 5.1 控制台（spec §2 地基行 + §6.5，MUST）
-
-- 技术栈（spec §3 定版）：**React 19 + Vite + Tailwind CSS 4 + React Router + Zustand**（Radix 按需）。独立 `web/` 包，不做 SSR/PWA/i18n。
-- 共享类型：`shared/stream.ts`（StreamEvent）与 `shared/protocol.ts` 由 web/ 直接 import，**禁止复制副本**。
-- 页面最小面（MUST）：
-  1. **setup 向导**（首用户 = admin，仅一次）→ 登录页。
-  2. **chat**：流式渲染 + **虚拟化长列表** + **断线指数退避重连**（§5-10 防线三件套，一条都不能少）；消费 `stream` WS envelope。
-  3. **profiles 编辑器 + 版本历史**（四段正交编辑、restore、两阶段草稿确认短语发布）。
-  4. **tasks 页**（列表/建任务/启停/run-now/runs 历史）。
-  5. **settings 最小**（Provider 单一 Anthropic 兼容端点配置，MUST-lite）。
-- API 面：`docs/API.md`（已有文档，若新增路由同步更新）。
-
-### 5.2 最终审查（spec §7，所有 Loop 之后的六步，逐条留痕）
-
-1. **Scope Review**：全仓 grep 禁词（TODO/FIXME/stub/placeholder），§8 不做清单逐项确认无残迹（含注释掉的脚手架）。
-2. **Claim Review**：README/docs 每条 claim 指到源码+测试。
-3. **Architecture Review**：shared 单一源 / DB 唯一入口 / R14 原子竞争（两条 SQL 分支）/ R15 发布 source 推导 / R20 admin 无旁路（role 收而不用）/ R07 隔离 / 统一 Runtime（三条入站同一路径）。
-4. **Security Review**：Cookie/HMAC/timingSafeEqual 位置 / 双层限流 / 凭据 AES-256-GCM / Secret 文件 0600 / Owner Gate 静默丢弃 / 404 越权 / 日志脱敏。
-5. **Test Review**：format/typecheck/vitest/migration/build 全绿 + 每个选点必备测试清单对照。
-6. **Manual Smoke**：登录 / Profile 发布 / 任务触发 / 越权 404 / Owner Gate / 重启恢复（脚本 `scripts/smoke-loop3.mts` 已可作任务冒烟的参考）。
-
-### 5.3 README（Loop 5 交付物）
-
-自写 README：架构图、**「已验证渠道 / 骨架渠道」诚实表格**、不出现任何编造量化指标（§9-12：效果全定性）；MIT 复用但保留原项目 LICENSE 归属声明（§9-10）。`docs/ACL-MATRIX.md`、`docs/SECURITY.md`、`docs/API.md` 已存在，随 Loop 5 路由增量同步。
+- **web/ 包**（npm workspace `clawtide-web`）：React 19 + Vite 7 + Tailwind 4 + React Router + Zustand；`shared/stream.ts`/`protocol.ts` 经 `@shared` 别名直接 import，零副本。
+- **页面**：setup 向导 / login / chat（流式 + 尾窗虚拟化 + 指数退避重连带 jitter）/ profiles（四段编辑 + 版本历史 + restore + 两阶段确认短语）/ tasks（列表/创建/启停/run-now/runs）/ workspaces（Home 不可删）/ settings（Provider 端点 + 只写 key）。
+- **新增路由族**：`/settings/provider` GET/PUT（admin 角色闸；key 只写不回显；持久化 > env > SDK 默认链，`AgentRuntime.deps.baseUrl` 每 turn 刷新 → SDK env `ANTHROPIC_BASE_URL`）。`docs/API.md` 已同步。
+- **最终审查六步全部通过**：scope grep 无禁词（无 TODO/FIXME/stub 残迹，不做清单无越界）；claim/架构/安全/测试对照通过；`scripts/smoke-loop5.mts` 端到端 PASS（setup → profile → 草稿错短语作废 → WS 诚实 not-configured 错误流 → 任务诚实 failed → settings 只写 → 跨 owner 404）。
+- **README.md** 自写完成：架构图、诚实渠道表（Telegram/飞书 NOT VERIFIED 标注）、无量化指标、保留上游 LICENSE 归属。
 
 ## 3. 施工规则备忘（每次开工必读）
 
@@ -80,10 +62,12 @@
 
 ## 4. 质量门槛（每个 Loop 的 Gate）
 
-- 每 Loop Gate：`typecheck` / `vitest run` / `build` / `format:changed` 全绿 + 真实启动冒烟。
+- 每 Loop Gate：`typecheck` / `typecheck:web` / `vitest run` / `build` / `build:web` / `format:changed` 全绿 + 真实启动冒烟。
 - 本仓库已知坑（省后来人时间）：
   - better-sqlite3 STRICT 表：`lease_token` 等整型列必须 `NOT NULL DEFAULT 0`，插入缺列不会自动补；
   - cron-parser v5 必须 `tz: 'UTC'`（本地时区会偏移 fire time）且用 `prev()` 取「最近一个已到期槽位」（`next()` 永远在未来，物化扫描会扑空）；
   - 条件 UPDATE 的 WHERE 必须用**行内实时值**（`lease_token`），不能信调用方传入的 pre-claim 快照；
   - undici keep-alive 会挂住 `server.close()`，测试收尾必须 `closeAllConnections()`；
-  - auth 测试要复现 HKDF：用 `loadOrCreateSecret` 走 `testKey()` helper，别手拼明文 secret。
+  - auth 测试要复现 HKDF：用 `loadOrCreateSecret` 走 `testKey()` helper，别手拼明文 secret；
+  - npm workspaces + Vite：宿主仓的 vitest 依赖会把 vite 7 抬进根 node_modules，`web/` 的 vite 必须同样声明 ^7 否则插件类型冲突（plugin-react/tailwind 的 peer 挂在 vite 7 上）；
+  - `ws` 客户端测试：事件处理器必须在 await 之前绑定（晚绑定会漏帧）；浏览器风格 `ws.onopen` 在 Node 环境不可靠，用 `ws.on('open', ...)`。
