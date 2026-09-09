@@ -185,7 +185,7 @@ export function TasksPage() {
             }}
           />
         ) : (
-          <EmptyState title="Give good work a rhythm.">
+          <EmptyState title="Give good work a rhythm." art="stones">
             Select a task to see its schedule and run history, or create something new.
           </EmptyState>
         )}

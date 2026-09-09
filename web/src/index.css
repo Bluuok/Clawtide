@@ -293,6 +293,80 @@ h3 {
 .workspace-list > div {
   min-height: 108px;
 }
+.studio-art {
+  display: block;
+  object-fit: cover;
+}
+.workspace-gallery {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+}
+.workspace-art-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dce0d4;
+  border-radius: 16px;
+  background: #fffefa;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  padding: 0 22px 22px;
+}
+.workspace-art-card .workspace-cover {
+  width: calc(100% + 44px);
+  max-width: none;
+  height: 190px;
+  margin: 0 -22px;
+  object-position: center 65%;
+}
+.workspace-art-card > div:last-child {
+  flex-wrap: wrap;
+}
+.profile-intro {
+  position: relative;
+  padding-right: 180px;
+  min-height: 112px;
+}
+.profile-art {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 158px;
+  height: 105px;
+  border-radius: 12px;
+  object-position: center 65%;
+}
+.empty-state-art {
+  padding-top: 16px;
+  padding-bottom: 20px;
+}
+.empty-art {
+  width: min(100%, 270px);
+  height: 180px;
+  object-fit: contain;
+  object-position: center 60%;
+  border-radius: 14px;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) {
+  .profile-intro {
+    padding-right: 0;
+  }
+  .profile-art {
+    position: static;
+    width: 100%;
+    height: 100px;
+    margin-bottom: 16px;
+  }
+  .empty-art {
+    height: 130px;
+    width: min(100%, 195px);
+    margin-bottom: 18px;
+  }
+  .workspace-art-card .workspace-cover {
+    height: 150px;
+  }
+}
 .empty-state {
   display: flex;
   flex: 1;

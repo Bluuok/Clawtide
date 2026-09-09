@@ -144,12 +144,43 @@ export function NavIcon({ name }: { name: string }) {
     </svg>
   );
 }
-export function EmptyState({ title, children }: { title: string; children: ReactNode }) {
+export function ArtImage({
+  kind,
+  className = '',
+}: {
+  kind: 'stones' | 'light';
+  className?: string;
+}) {
   return (
-    <div className="empty-state">
-      <div className="empty-mark">
-        <TideMark />
-      </div>
+    <img
+      className={`studio-art ${className}`}
+      src={`/images/${kind === 'stones' ? 'tidal-stones' : 'light-folds'}.webp`}
+      width={1536}
+      height={1024}
+      alt=""
+      loading="lazy"
+      decoding="async"
+    />
+  );
+}
+export function EmptyState({
+  title,
+  children,
+  art,
+}: {
+  title: string;
+  children: ReactNode;
+  art?: 'stones' | 'light';
+}) {
+  return (
+    <div className={`empty-state ${art ? 'empty-state-art' : ''}`}>
+      {art ? (
+        <ArtImage kind={art} className="empty-art" />
+      ) : (
+        <div className="empty-mark">
+          <TideMark />
+        </div>
+      )}
       <span className="eyebrow">A little room for possibility</span>
       <h2>{title}</h2>
       <p>{children}</p>

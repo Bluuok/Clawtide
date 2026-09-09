@@ -19,6 +19,10 @@ The user supplies generated raster artwork. SVG/CSS decoration is the fallback.
 
 ## Follow-up refinements
 
+- Integrated user-supplied tidal stones and optical glass artwork as optimized WebP
+  assets (about 150 KB combined). Chat uses art only in empty states; workspace
+  cards and the profile introduction use separate decorative image regions.
+  Settings and populated task/message lists stay free of background artwork.
 - Completed profiles section editing, dirty-state protection, save/discard and version restoration.
 - Completed workspace search, creation/rename feedback, pending controls and Home protection.
 - Completed admin-only provider settings, URL validation and accurate saved-key status.

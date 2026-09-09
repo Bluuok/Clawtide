@@ -279,6 +279,7 @@ for (const route of ['chat', 'profiles', 'tasks', 'workspaces', 'settings', 'log
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByText('Workspace renamed.', { exact: true }).waitFor();
     assert.equal(extraWorkspace.displayName, 'Research studio');
+    await page.screenshot({ path: `${output}/workspace-gallery-mobile.png`, fullPage: true });
     console.log('Workspace search, home protection, creation and rename: passed');
   }
   if (route === 'settings') {
@@ -318,6 +319,10 @@ assert.match(
 );
 emptyTranscript = true;
 await page.reload();
+await page.locator('.empty-art').evaluate((img) => img.decode());
+await page.screenshot({ path: `${output}/chat-empty-mobile.png`, fullPage: true });
+await page.setViewportSize({ width: 1440, height: 960 });
+await page.screenshot({ path: `${output}/chat-empty.png`, fullPage: true });
 await page.getByRole('button', { name: 'Help me plan a focused day.' }).click();
 assert.equal(
   await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(),

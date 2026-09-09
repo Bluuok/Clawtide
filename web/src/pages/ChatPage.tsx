@@ -118,7 +118,7 @@ export function ChatPage() {
             Opening your workspace…
           </div>
         ) : (
-          <EmptyState title="What is on your mind?">
+          <EmptyState title="What is on your mind?" art="light">
             Choose a workspace to start a conversation with your digital worker.
           </EmptyState>
         )}
@@ -322,7 +322,7 @@ function Transcript({
           )}
           {!loading && !error && visible.length === 0 && (
             <>
-              <EmptyState title="Begin with a thought.">
+              <EmptyState title="Begin with a thought." art="light">
                 Ask a question, explore an idea, or plan your next step.
               </EmptyState>
               <div className="suggestion-list">

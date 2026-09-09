@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Workspace } from '../api.js';
-import { ConfirmAction } from '../components/Design.js';
+import { ArtImage, ConfirmAction } from '../components/Design.js';
 
 export function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -127,14 +127,12 @@ export function WorkspacesPage() {
           Loading workspaces…
         </p>
       )}
-      <div className="workspace-list">
+      <div className="workspace-list workspace-gallery">
         {workspaces
           .filter((ws) => ws.displayName.toLowerCase().includes(query.trim().toLowerCase()))
           .map((ws) => (
-            <div
-              key={ws.id}
-              className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3"
-            >
+            <div key={ws.id} className="workspace-art-card">
+              <ArtImage kind={ws.isHome ? 'stones' : 'light'} className="workspace-cover" />
               <div className="min-w-0 flex-1">
                 {renaming === ws.id ? (
                   <form
