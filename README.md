@@ -1,5 +1,9 @@
 # Clawtide
 
+![Clawtide — Make room for focus, ideas, and what matters.](docs/assets/clawtide-hero.gif)
+
+[View the original artwork without animation](web/public/images/tidal-sculpture.png).
+
 Self-hosted, multi-user AI digital-worker platform. Digital employees stay on
 duty long-term through the Web console and IM channels — messages arrive
 passively, scheduled tasks fire proactively — while identity, permissions, and

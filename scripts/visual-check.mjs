@@ -326,6 +326,19 @@ assert.equal(
 console.log(
   'Conversation search, per-session drafts, retry, clipboard and prompt suggestions: passed',
 );
+authenticated = false;
+for (const width of [390, 768, 900, 1280, 1440]) {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto('http://127.0.0.1:5173/login');
+  const story = await page.locator('.auth-story').boundingBox();
+  const art = await page.locator('.auth-art-image').boundingBox();
+  assert.ok(story && art);
+  assert.ok(
+    story.x + story.width <= art.x + 1 || story.y + story.height <= art.y + 1,
+    `Login text and artwork must not overlap at ${width}px`,
+  );
+}
+console.log('Login text/art separation at five viewport widths: passed');
 console.log('Page errors:', errors);
 await browser.close();
 if (errors.length) process.exitCode = 1;
