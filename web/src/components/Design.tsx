@@ -1,4 +1,53 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+function TypedWord() {
+  const [word, setWord] = useState('what matters.');
+  useEffect(() => {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    let timer: ReturnType<typeof setTimeout>;
+    let phrase = 0,
+      length = 13,
+      deleting = true;
+    const words = ['what matters.', 'focus.', 'ideas.'];
+    const tick = () => {
+      if (reduced.matches) {
+        setWord(words[0]);
+        return;
+      }
+      length += deleting ? -1 : 1;
+      setWord(words[phrase].slice(0, length));
+      let delay = deleting ? 65 : 130;
+      if (length === 0) {
+        deleting = false;
+        phrase = (phrase + 1) % words.length;
+        delay = 350;
+      } else if (length === words[phrase].length) {
+        deleting = true;
+        delay = 2200;
+      }
+      timer = setTimeout(tick, delay);
+    };
+    const restart = () => {
+      clearTimeout(timer);
+      setWord(words[0]);
+      phrase = 0;
+      length = 13;
+      deleting = true;
+      if (!reduced.matches) timer = setTimeout(tick, 2200);
+    };
+    restart();
+    reduced.addEventListener('change', restart);
+    return () => {
+      clearTimeout(timer);
+      reduced.removeEventListener('change', restart);
+    };
+  }, []);
+  return (
+    <span className="typed-word" aria-hidden="true">
+      {word}
+      <span className="typing-cursor">|</span>
+    </span>
+  );
+}
 export function ConfirmAction({
   title,
   children,
@@ -125,10 +174,10 @@ export function AuthFrame({ children }: { children: ReactNode }) {
         </div>
         <div className="auth-story">
           <span className="eyebrow">Your digital workspace</span>
-          <h2>
-            Make room for
+          <h2 aria-label="Make room for what matters.">
+            <span aria-hidden="true">Make room for</span>
             <br />
-            what matters.
+            <TypedWord />
           </h2>
           <p>
             A thoughtful home for your digital workers, conversations, and everyday progress.

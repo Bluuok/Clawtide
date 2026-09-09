@@ -414,20 +414,33 @@ h3 {
   color: #173f35;
   min-height: 660px;
   padding: 42px;
-  display: grid;
-  grid-template-rows: auto auto minmax(200px, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 22px;
   height: max(660px, calc(100dvh - 44px));
 }
 .auth-art-image {
-  grid-row: 3;
+  position: absolute;
+  left: 0;
+  bottom: 0;
   min-height: 0;
   width: 100%;
-  height: 100%;
+  height: 62%;
   object-fit: cover;
   object-position: center bottom;
   pointer-events: none;
-  border-radius: 12px;
+  mask-image: linear-gradient(transparent, black 22%);
+}
+.typed-word {
+  display: inline-block;
+  min-height: 1.1em;
+  color: #438778;
+  white-space: nowrap;
+}
+.typing-cursor {
+  font-family: Arial, sans-serif;
+  font-weight: 200;
+  opacity: 0.6;
 }
 .auth-art .brand {
   grid-row: 1;
@@ -435,6 +448,7 @@ h3 {
 .auth-art .brand,
 .auth-story,
 .auth-caption {
+  z-index: 1;
   position: relative;
 }
 .auth-story {
@@ -637,12 +651,15 @@ h3 {
   .auth-art {
     min-height: 0;
     height: auto;
+    display: grid;
     grid-template-columns: minmax(0, 1fr) 100px;
     grid-template-rows: auto auto;
     gap: 20px 12px;
     padding: 24px;
   }
   .auth-art-image {
+    position: static;
+    mask-image: linear-gradient(to right, transparent, black 25%);
     grid-column: 2;
     grid-row: 1 / 3;
     width: 100%;
