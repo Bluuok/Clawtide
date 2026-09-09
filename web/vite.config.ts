@@ -6,7 +6,6 @@ import path from 'node:path';
 // The console is served by the Clawtide backend in production (built assets);
 // in dev, Vite proxies API + WS to the backend so cookies flow same-origin.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
@@ -26,4 +25,25 @@ export default defineConfig({
       '/healthz': 'http://127.0.0.1:3000',
     },
   },
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: 'console-document-routes',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (
+            req.method === 'GET' &&
+            req.headers.accept?.includes('text/html') &&
+            /^\/(chat|profiles|tasks|workspaces|settings|login|setup)\/?(?:\?.*)?$/.test(
+              req.url ?? '',
+            )
+          ) {
+            req.url = '/index.html';
+          }
+          next();
+        });
+      },
+    },
+  ],
 });

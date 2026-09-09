@@ -45,8 +45,8 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Settings — Provider</h1>
+    <div className="content-page space-y-4" style={{ maxWidth: 680 }}>
+      <h1>Connect your intelligence.</h1>
       <p className="text-sm text-slate-600">
         Single Anthropic-compatible endpoint. Takes effect on the next agent turn.
       </p>

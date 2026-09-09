@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Profile, type ProfileVersion } from '../api.js';
+import { EmptyState } from '../components/Design.js';
 
 const SEGMENTS = [
   { key: 'identity', label: 'IDENTITY — who am I' },
@@ -32,8 +33,8 @@ export function ProfilesPage() {
   }, [reload]);
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-64 flex-col border-r border-slate-200 bg-white">
+    <div className="split-page">
+      <div className="list-panel">
         <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           My profiles
         </div>
@@ -70,9 +71,9 @@ export function ProfilesPage() {
           onReload={reload}
         />
       ) : (
-        <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-          Create a profile to configure an agent persona.
-        </div>
+        <EmptyState title="Shape your digital worker.">
+          Create a profile to define its identity, values, working rules, and tools.
+        </EmptyState>
       )}
     </div>
   );
@@ -150,11 +151,12 @@ function ProfileEditor(props: {
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-4 p-6">
-        <div className="flex items-center gap-3">
+    <div className="detail-panel">
+      <div className="content-page space-y-4">
+        <div className="editor-toolbar">
           <input
             value={name}
+            aria-label="Profile name"
             onChange={(e) => {
               setName(e.target.value);
               setDirty(true);
@@ -163,6 +165,7 @@ function ProfileEditor(props: {
           />
           <select
             value={mode}
+            aria-label="Prompt mode"
             onChange={(e) => {
               setMode(e.target.value as 'append' | 'replace');
               setDirty(true);
@@ -195,6 +198,7 @@ function ProfileEditor(props: {
             </div>
             <textarea
               value={segs[s.key]}
+              aria-label={s.label}
               onChange={(e) => {
                 setSegs((prev) => ({ ...prev, [s.key]: e.target.value }));
                 setDirty(true);

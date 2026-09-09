@@ -7,6 +7,7 @@ import { useNavigate, Link } from 'react-router';
 import { api, ApiError, type PublicUser } from '../api.js';
 import { useSession } from '../stores/session.js';
 import { Field } from './SetupPage.js';
+import { AuthFrame } from '../components/Design.js';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
@@ -45,12 +46,10 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-slate-50">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-      >
-        <h1 className="text-xl font-semibold">Sign in</h1>
+    <AuthFrame>
+      <form onSubmit={submit} className="auth-form space-y-4">
+        <span className="eyebrow">Welcome to your workspace</span>
+        <h1>Welcome back.</h1>
         <Field label="Username" value={username} onChange={setUsername} />
         <Field label="Password" value={password} onChange={setPassword} type="password" />
         {error !== null && <p className="text-sm text-red-600">{error}</p>}
@@ -68,6 +67,6 @@ export function LoginPage() {
           </Link>
         </p>
       </form>
-    </div>
+    </AuthFrame>
   );
 }

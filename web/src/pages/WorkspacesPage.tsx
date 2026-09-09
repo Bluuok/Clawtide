@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Workspace } from '../api.js';
+import { ConfirmAction } from '../components/Design.js';
 
 export function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -46,7 +47,6 @@ export function WorkspacesPage() {
 
   const remove = async (ws: Workspace) => {
     if (ws.isHome) return;
-    if (!window.confirm(`Delete workspace "${ws.displayName}"?`)) return;
     setError(null);
     try {
       await api.delete(`/workspaces/${ws.id}`);
@@ -57,10 +57,13 @@ export function WorkspacesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <h1 className="text-lg font-semibold">Workspaces</h1>
+    <div className="content-page space-y-4">
+      <h1>A place for every pursuit.</h1>
+      <p className="text-sm text-slate-500">
+        Keep conversations and scheduled work organized in their own spaces.
+      </p>
       {error !== null && <p className="text-sm text-red-600">{error}</p>}
-      <div className="space-y-2">
+      <div className="workspace-list">
         {workspaces.map((ws) => (
           <div
             key={ws.id}
@@ -116,14 +119,14 @@ export function WorkspacesPage() {
                 >
                   Rename
                 </button>
-                <button
-                  onClick={() => void remove(ws)}
+                <ConfirmAction
+                  title={`Delete ${ws.displayName}?`}
+                  onConfirm={() => remove(ws)}
                   disabled={ws.isHome}
-                  title={ws.isHome ? 'Home workspaces cannot be deleted (any role)' : undefined}
                   className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40"
                 >
-                  Delete
-                </button>
+                  This workspace will be removed. Home workspaces are protected.
+                </ConfirmAction>
               </div>
             )}
           </div>

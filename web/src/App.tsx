@@ -48,7 +48,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<ChatPage />} />
+        <Route path="/" element={<Navigate to="/chat" replace />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/profiles" element={<ProfilesPage />} />
         <Route path="/tasks" element={<TasksPage />} />

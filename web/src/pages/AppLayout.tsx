@@ -3,7 +3,8 @@
  * The chat store's WS connection lives for the whole authenticated session.
  */
 import { useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router';
+import { NavIcon, TideMark } from '../components/Design.js';
 import { useSession } from '../stores/session.js';
 import { useChat } from '../stores/chat.js';
 import { api } from '../api.js';
@@ -20,6 +21,8 @@ export function AppLayout() {
   const user = useSession((s) => s.user);
   const setUser = useSession((s) => s.setUser);
   const navigate = useNavigate();
+  const location = useLocation();
+  const title = NAV.find((item) => location.pathname === item.to)?.label ?? 'Chat';
   const socketStatus = useChat((s) => s.socketStatus);
   const reconnectAttempt = useChat((s) => s.reconnectAttempt);
   const connect = useChat((s) => s.connect);
@@ -38,35 +41,44 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900">
-      <aside className="flex w-52 flex-col border-r border-slate-200 bg-white">
-        <div className="px-4 py-4 text-lg font-semibold tracking-tight">Clawtide</div>
-        <nav className="flex-1 space-y-1 px-2">
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <div className="brand">
+          <TideMark />
+          <span>clawtide</span>
+        </div>
+        <div className="brand-subtitle">Digital worker studio</div>
+        <nav className="app-nav" aria-label="Primary navigation">
           {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `block rounded-md px-3 py-2 text-sm ${
-                  isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
-                }`
-              }
-            >
-              {item.label}
+            <NavLink key={item.to} to={item.to} aria-label={item.label} title={item.label}>
+              <NavIcon name={item.label} />
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-slate-200 p-3 text-sm">
-          <div className="mb-2 font-medium">{user?.username}</div>
-          <button
-            onClick={() => void logout()}
-            className="w-full rounded-md border border-slate-300 px-3 py-1.5 hover:bg-slate-100"
-          >
+        <div className="sidebar-bottom">
+          <div className="account-name">
+            <span className="account-avatar">{user?.username.slice(0, 1).toUpperCase()}</span>
+            {user?.username}
+          </div>
+          <button onClick={() => void logout()} className="logout">
             Log out
           </button>
         </div>
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="app-main">
+        <header className="page-header">
+          <div>
+            <span className="eyebrow">Your workspace / {title}</span>
+            <h1>{title === 'Chat' ? 'Room to think.' : title}</h1>
+          </div>
+          <span
+            className={`connection-state ${socketStatus !== 'open' ? 'offline' : ''}`}
+            role="status"
+          >
+            {socketStatus === 'open' ? 'Connected' : 'Reconnecting'}
+          </span>
+        </header>
         {socketStatus !== 'open' && (
           <div className="bg-amber-100 px-4 py-1.5 text-center text-xs text-amber-900">
             {socketStatus === 'connecting'
@@ -74,7 +86,7 @@ export function AppLayout() {
               : `Realtime link down — reconnecting (attempt ${reconnectAttempt + 1})…`}
           </div>
         )}
-        <div className="min-h-0 flex-1">
+        <div className="page-outlet">
           <Outlet />
         </div>
       </main>

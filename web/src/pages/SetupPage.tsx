@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api, ApiError, type PublicUser } from '../api.js';
 import { useSession } from '../stores/session.js';
+import { AuthFrame } from '../components/Design.js';
 
 export function SetupPage() {
   const [username, setUsername] = useState('');
@@ -35,11 +36,8 @@ export function SetupPage() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-slate-50">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-      >
+    <AuthFrame>
+      <form onSubmit={submit} className="auth-form space-y-4">
         <h1 className="text-xl font-semibold">Welcome to Clawtide</h1>
         <p className="text-sm text-slate-600">
           Create the administrator account. This is a one-time setup — afterwards, accounts are
@@ -67,7 +65,7 @@ export function SetupPage() {
           {busy ? 'Creating…' : 'Create admin account'}
         </button>
       </form>
-    </div>
+    </AuthFrame>
   );
 }
 

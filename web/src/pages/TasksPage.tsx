@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type Task, type TaskRun, type Workspace } from '../api.js';
+import { ConfirmAction, EmptyState } from '../components/Design.js';
 
 export function TasksPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -52,11 +53,12 @@ export function TasksPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-96 flex-col border-r border-slate-200 bg-white">
+    <div className="split-page">
+      <div className="list-panel">
         <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
           <select
             value={workspaceId}
+            aria-label="Task workspace"
             onChange={(e) => setWorkspaceId(e.target.value)}
             className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           >
@@ -95,14 +97,14 @@ export function TasksPage() {
           <NewTaskButton workspaceId={workspaceId} onCreated={() => void reload()} />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="detail-panel">
         {error !== null && <p className="mb-3 text-sm text-red-600">{error}</p>}
         {selected !== null ? (
           <TaskDetail task={selected} onAct={act} />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
-            Select a task to see details and run history.
-          </div>
+          <EmptyState title="Give good work a rhythm.">
+            Select a task to see its schedule and run history, or create something new.
+          </EmptyState>
         )}
       </div>
     </div>
@@ -233,6 +235,7 @@ function TaskDetail(props: {
 }) {
   const t = props.task;
   const [runs, setRuns] = useState<TaskRun[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const loadRuns = useCallback(async () => {
     const { runs: r } = await api.get<{ runs: TaskRun[] }>(`/tasks/${t.id}`);
@@ -241,11 +244,12 @@ function TaskDetail(props: {
 
   useEffect(() => {
     setRuns(null);
+    setNotice(null);
     void loadRuns();
   }, [loadRuns]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="content-page space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">{t.prompt}</h2>
@@ -303,7 +307,7 @@ function TaskDetail(props: {
                 api
                   .post<{ queued: boolean; runId?: string }>(`/tasks/${t.id}/run`)
                   .then((res) => {
-                    window.alert(
+                    setNotice(
                       res.queued ? `Queued (run ${res.runId ?? ''})` : 'Task not active',
                     );
                   }),
@@ -314,16 +318,13 @@ function TaskDetail(props: {
           >
             Run now
           </button>
-          <button
-            onClick={() => {
-              if (window.confirm('Delete this task?')) {
-                void props.onAct(() => api.delete(`/tasks/${t.id}`));
-              }
-            }}
+          <ConfirmAction
+            title="Delete this task?"
+            onConfirm={() => props.onAct(() => api.delete(`/tasks/${t.id}`))}
             className="rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
           >
-            Delete
-          </button>
+            This task will be removed. This action cannot be undone.
+          </ConfirmAction>
           <button
             onClick={() => void loadRuns()}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
@@ -331,8 +332,13 @@ function TaskDetail(props: {
             Refresh runs
           </button>
         </div>
+        {notice && (
+          <p role="status" className="mt-3 text-sm text-slate-600">
+            {notice}
+          </p>
+        )}
       </div>
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Runs history
         </div>
