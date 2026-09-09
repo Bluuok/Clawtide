@@ -13,6 +13,8 @@ page.on('pageerror', (e) => errors.push(e.message));
 let authenticated = true;
 let failTranscript = false;
 let emptyTranscript = false;
+let createdTask = null;
+let taskCreates = 0;
 const time = '2026-09-09T04:00:00Z';
 const workspace = {
   id: 'home',
@@ -80,9 +82,13 @@ await page.route('**/*', async (route) => {
         },
       ],
     };
-  else if (path === '/tasks') data = { tasks: [task] };
+  else if (path === '/tasks' && req.method() === 'POST') {
+    taskCreates++;
+    createdTask = { ...task, ...req.postDataJSON(), id: 't2' };
+    data = { task: createdTask };
+  } else if (path === '/tasks') data = { tasks: createdTask ? [task, createdTask] : [task] };
   else if (path === '/tasks/t1/run') data = { queued: true, runId: 'test-run' };
-  else if (path === '/tasks/t1') data = { runs: [] };
+  else if (path === '/tasks/t1' || path === '/tasks/t2') data = { runs: [] };
   else if (path === '/settings/provider')
     data = { provider: { baseUrl: 'https://api.anthropic.com', configured: true } };
   else data = {};
@@ -159,6 +165,34 @@ for (const route of ['chat', 'profiles', 'tasks', 'workspaces', 'settings', 'log
     assert.equal(await page.getByRole('dialog').isVisible(), false);
     await page.getByRole('button', { name: 'Run now' }).click();
     await page.getByText('Queued (run test-run)', { exact: true }).waitFor();
+    await page.getByRole('searchbox', { name: 'Find tasks' }).fill('unmatched');
+    await page.getByText('No tasks match your filters.').waitFor();
+    await page.getByRole('searchbox', { name: 'Find tasks' }).fill('');
+    await page.getByRole('combobox', { name: 'Filter tasks by status' }).selectOption('paused');
+    await page.getByText('No tasks match your filters.').waitFor();
+    await page.getByRole('combobox', { name: 'Filter tasks by status' }).selectOption('all');
+    await page.getByRole('button', { name: '+ New task', exact: true }).click();
+    const createDialog = page.getByRole('dialog', { name: 'Create a task.' });
+    await createDialog.waitFor();
+    await createDialog
+      .getByRole('textbox', { name: 'What should your worker do?' })
+      .fill('Review the weekly reading list');
+    await createDialog.getByRole('combobox', { name: 'Schedule type' }).selectOption('once');
+    await createDialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await createDialog.getByText('Choose a date and time in the future.').waitFor();
+    assert.equal(taskCreates, 0);
+    await createDialog
+      .getByRole('combobox', { name: 'Schedule type' })
+      .selectOption('interval');
+    await createDialog.getByRole('spinbutton').fill('120');
+    await page.screenshot({ path: `${output}/task-create-mobile.png`, fullPage: true });
+    await createDialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await createDialog.waitFor({ state: 'hidden' });
+    assert.equal(taskCreates, 1);
+    assert.equal(createdTask.intervalSeconds, 120);
+    assert.equal(createdTask.contextMode, 'isolated');
+    await page.getByRole('heading', { name: 'Review the weekly reading list' }).waitFor();
+    console.log('Task search, status filter, date validation and creation payload: passed');
   }
   console.log(`${route}-mobile`, { overflow });
 }

@@ -17,7 +17,16 @@ The user supplies generated raster artwork. SVG/CSS decoration is the fallback.
 5. Style login/setup with a replaceable tidal art panel.
 6. Verify the frontend build, desktop/mobile layout and important interactions.
 
-## Artwork brief
+## Follow-up refinements
+
+- Chat: searchable conversations, per-session in-memory drafts, mobile conversation
+  browser, clipboard actions, prompt suggestions and retryable transcript loading.
+- Tasks: searchable/status-filtered lists, an accessible creation dialog, explicit
+  UTC/local schedule labels, date/interval validation, pending-action controls and
+  retryable run history. Creating a task selects it immediately.
+- Browser fixture checks cover search, draft isolation, clipboard, retries,
+  mobile composer placement, deletion cancellation and task creation payloads.
+- No additional generated imagery is required for these functional workspaces.
 
 ## First implementation delivered
 

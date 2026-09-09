@@ -671,6 +671,96 @@ h3 {
 }
 
 /* Conversation workspace refinements. */
+.tasks-sidebar {
+  width: 260px;
+}
+.task-filters {
+  display: grid;
+  gap: 10px;
+}
+.task-filters input,
+.task-filters select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fffefa;
+  font-size: 12px;
+}
+.task-title {
+  font: 400 25px/1.3 var(--display);
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+  margin-right: 18px;
+}
+.task-dialog {
+  width: min(560px, calc(100vw - 28px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  margin: auto;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fffefa;
+  color: #173f35;
+  box-shadow: 0 24px 80px #173f3520;
+}
+.task-dialog::backdrop {
+  background: #173f3555;
+  backdrop-filter: blur(4px);
+}
+.task-dialog h2 {
+  font: 400 34px var(--display);
+  letter-spacing: -0.04em;
+  margin: 8px 0 12px;
+}
+.task-fields {
+  border: 0;
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+  min-width: 0;
+}
+.task-fields label {
+  font-size: 12px;
+  color: #365447;
+}
+.task-fields input,
+.task-fields textarea {
+  width: 100%;
+}
+.task-dialog form > .flex {
+  margin-top: 22px;
+}
+.tasks-page button:disabled {
+  opacity: 0.5;
+}
+@media (max-width: 760px) {
+  .tasks-page .tasks-sidebar {
+    width: 100%;
+    max-height: 310px;
+  }
+  .tasks-page .task-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .tasks-page .task-filters .eyebrow {
+    grid-column: 1 / -1;
+  }
+  .tasks-page .task-filters input {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .tasks-page .task-filters select:first-of-type {
+    grid-column: 1 / -1;
+  }
+  .task-dialog {
+    padding: 22px;
+  }
+  .task-dialog .task-fields > .flex {
+    flex-direction: column;
+  }
+}
 .chat-page {
   position: relative;
 }
