@@ -337,13 +337,56 @@ for (const width of [390, 768, 900, 1280, 1440]) {
   await page.goto('http://127.0.0.1:5173/login');
   const story = await page.locator('.auth-story').boundingBox();
   const art = await page.locator('.auth-art-image').boundingBox();
-  assert.ok(story && art);
-  assert.ok(
-    story.x + story.width <= art.x + 1 || story.y + story.height <= art.y + 1,
-    `Login text and artwork must not overlap at ${width}px`,
-  );
+  const panel = await page.locator('.auth-art').boundingBox();
+  assert.ok(story && art && panel);
+  assert.ok(Math.abs(art.height - panel.height) < 2, `Full-height artwork at ${width}px`);
+  const overlay = await page
+    .locator('.auth-art')
+    .evaluate((el) => getComputedStyle(el, '::after').backgroundImage);
+  assert.match(overlay, /linear-gradient/, 'Text readability uses a feathered overlay');
+  assert.ok(story.x >= panel.x && story.x + story.width <= panel.x + panel.width);
+  await page.screenshot({ path: `${output}/login-${width}.png`, fullPage: true });
 }
-console.log('Login text/art separation at five viewport widths: passed');
+await page.emulateMedia({ reducedMotion: 'reduce' });
+await page.goto('http://127.0.0.1:5173/login');
+assert.equal(await page.locator('.typed-word').innerText(), 'what matters.|');
+await page.emulateMedia({ reducedMotion: 'no-preference' });
+const caret = page.locator('.typing-cursor');
+const blink = await caret.evaluate((el) => {
+  const animation = el.getAnimations().find((a) => a.animationName === 'caret-blink');
+  if (!animation) return null;
+  animation.pause();
+  animation.currentTime = 100;
+  const on = getComputedStyle(el).opacity;
+  animation.currentTime = 600;
+  const off = getComputedStyle(el).opacity;
+  return { on, off };
+});
+assert.ok(blink && Number(blink.on) > 0 && Number(blink.off) === 0, 'Caret visibly blinks');
+authenticated = true;
+for (const width of [390, 1280]) {
+  await page.setViewportSize({ width, height: 650 });
+  for (const [route, name] of [
+    ['profiles', 'Advanced · AI-assisted draft'],
+    ['workspaces', 'Create workspace'],
+    ['settings', 'Save changes'],
+  ]) {
+    await page.goto(`http://127.0.0.1:5173/${route}`);
+    const control =
+      route === 'profiles'
+        ? page.locator('.profile-advanced summary')
+        : page.getByRole('button', { name, exact: true });
+    await control.scrollIntoViewIfNeeded();
+    const box = await control.boundingBox();
+    assert.ok(
+      box && box.y >= 0 && box.y + box.height <= 650,
+      `${route} bottom control reachable at ${width}px`,
+    );
+    await page.screenshot({ path: `${output}/${route}-bottom-${width}.png`, fullPage: true });
+  }
+}
+console.log('Blinking caret and bottom controls at mobile/short-desktop sizes: passed');
+console.log('Full-image login gradient at five widths and reduced motion: passed');
 console.log('Page errors:', errors);
 await browser.close();
 if (errors.length) process.exitCode = 1;

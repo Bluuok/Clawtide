@@ -132,7 +132,19 @@ export function WorkspacesPage() {
           .filter((ws) => ws.displayName.toLowerCase().includes(query.trim().toLowerCase()))
           .map((ws) => (
             <div key={ws.id} className="workspace-art-card">
-              <ArtImage kind={ws.isHome ? 'stones' : 'light'} className="workspace-cover" />
+              <ArtImage
+                kind={
+                  ws.isHome
+                    ? 'coast'
+                    : (['light', 'linen', 'stones'] as const)[
+                        Array.from(ws.id).reduce(
+                          (hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0,
+                          0,
+                        ) % 3
+                      ]
+                }
+                className="workspace-cover"
+              />
               <div className="min-w-0 flex-1">
                 {renaming === ws.id ? (
                   <form

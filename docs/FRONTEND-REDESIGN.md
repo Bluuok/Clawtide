@@ -19,6 +19,19 @@ The user supplies generated raster artwork. SVG/CSS decoration is the fallback.
 
 ## Follow-up refinements
 
+- September 9 final integration follows OpenDesign Local Codex project
+  `clawtide-coastal-integration-67d9`, run `ef3c9c48-f5a1-4952-87ac-07cdca9ae193`.
+  The reference was read and adapted to the real React app, not substituted for it.
+- Login/setup retain the user's preferred original ceramic wave over the full art
+  panel with an ivory gradient protecting the heading; the partial-height crop is gone.
+  The coastal double exposure stays in workspace artwork. The typing caret blinks
+  once per second and respects reduced motion. Non-chat pages use one outer scroller;
+  bottom controls are checked at 390/1280 px widths and 650 px viewport height.
+- Chat empty artwork is 420 x 250 desktop / 300 x 180 mobile with feathered edges;
+  profiles use a larger linen introduction; workspaces use two columns and 3:2 covers.
+  The new coast replaces the proposed ink painting. Blue mobile art is not used.
+- Finite 600 ms entrance animation and 2 px card hover lift respect reduced motion.
+  No authentication, backend or persisted workspace fields were changed for the design.
 - Integrated user-supplied tidal stones and optical glass artwork as optimized WebP
   assets (about 150 KB combined). Chat uses art only in empty states; workspace
   cards and the profile introduction use separate decorative image regions.

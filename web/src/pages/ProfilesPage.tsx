@@ -153,7 +153,7 @@ export function ProfilesPage() {
           Loading profiles…
         </div>
       ) : (
-        <EmptyState title="Shape your digital worker." art="stones">
+        <EmptyState title="Shape your digital worker." art="linen">
           Create a profile to define its identity, values, working rules, and tools.
         </EmptyState>
       )}
@@ -288,7 +288,7 @@ function ProfileEditor(props: {
     <div className="detail-panel profile-detail">
       <div className="content-page space-y-4">
         <div className="profile-intro">
-          <ArtImage kind="stones" className="profile-art" />
+          <ArtImage kind="linen" className="profile-art" />
           <span className="eyebrow">Profile / Version {p.version}</span>
           <h2>Give your worker character.</h2>
           <p>Four thoughtful pieces, one consistent way of working.</p>

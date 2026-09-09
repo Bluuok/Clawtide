@@ -93,6 +93,7 @@ h3 {
   overflow: hidden;
 }
 .app-sidebar {
+  overflow-y: auto;
   width: 224px;
   flex-shrink: 0;
   padding: 32px 18px 20px;
@@ -263,6 +264,23 @@ h3 {
   min-height: 0;
   overflow-y: auto;
 }
+/* Non-chat pages use the outer scroller, so taller artwork cannot trap the footer
+   inside a second fixed-height scrolling panel. Chat retains its pinned composer. */
+.split-page:not(.chat-page) {
+  height: auto;
+  min-height: 100%;
+  align-items: flex-start;
+}
+.split-page:not(.chat-page) > .detail-panel {
+  overflow: visible;
+  padding-bottom: 28px;
+}
+.split-page:not(.chat-page) > .list-panel {
+  max-height: calc(100dvh - 160px);
+}
+.page-outlet {
+  scroll-padding-bottom: 32px;
+}
 .content-page {
   width: 100%;
   max-width: 1000px;
@@ -298,14 +316,14 @@ h3 {
   object-fit: cover;
 }
 .workspace-gallery {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .workspace-art-card {
   min-width: 0;
   overflow: hidden;
   border: 1px solid #dce0d4;
   border-radius: 16px;
-  background: #fffefa;
+  background: #f6f5ef;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -315,25 +333,35 @@ h3 {
 .workspace-art-card .workspace-cover {
   width: calc(100% + 44px);
   max-width: none;
-  height: 190px;
+  height: auto;
+  aspect-ratio: 3 / 2;
   margin: 0 -22px;
   object-position: center 65%;
+  mask-image: linear-gradient(black 72%, transparent 100%);
 }
 .workspace-art-card > div:last-child {
   flex-wrap: wrap;
 }
 .profile-intro {
   position: relative;
-  padding-right: 180px;
-  min-height: 112px;
+  padding-right: 0;
+  min-height: 190px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44%;
+  align-content: center;
+  column-gap: 20px;
+}
+.profile-intro > :not(img) {
+  grid-column: 1;
 }
 .profile-art {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 158px;
-  height: 105px;
-  border-radius: 12px;
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  width: 100%;
+  height: 190px;
+  border-radius: 0;
+  mask-image: linear-gradient(to right, transparent, black 18%, black 85%, transparent);
   object-position: center 65%;
 }
 .empty-state-art {
@@ -341,30 +369,65 @@ h3 {
   padding-bottom: 20px;
 }
 .empty-art {
-  width: min(100%, 270px);
-  height: 180px;
+  width: min(100%, 420px);
+  height: 250px;
   object-fit: contain;
   object-position: center 60%;
-  border-radius: 14px;
-  margin-bottom: 24px;
+  border-radius: 0;
+  margin-bottom: 18px;
+  mask-image:
+    linear-gradient(to right, transparent, black 7%, black 93%, transparent),
+    linear-gradient(to bottom, transparent, black 8%, black 85%, transparent);
+  mask-composite: intersect;
+}
+@keyframes studio-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.empty-art,
+.profile-art {
+  animation: studio-arrive 600ms ease-out both;
+}
+.workspace-art-card {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+@media (hover: hover) {
+  .workspace-art-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px #173f3510;
+  }
 }
 @media (max-width: 700px) {
+  .workspace-gallery {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .profile-intro {
     padding-right: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
   .profile-art {
     position: static;
+    grid-column: 1;
+    grid-row: 4;
     width: 100%;
-    height: 100px;
+    height: 160px;
     margin-bottom: 16px;
   }
   .empty-art {
-    height: 130px;
-    width: min(100%, 195px);
+    height: 180px;
+    width: min(100%, 300px);
     margin-bottom: 18px;
   }
   .workspace-art-card .workspace-cover {
-    height: 150px;
+    height: auto;
   }
 }
 .empty-state {
@@ -484,7 +547,7 @@ h3 {
   position: relative;
   overflow: hidden;
   border-radius: 18px;
-  background: #e5e2d9;
+  background: #f6f5ef;
   color: #173f35;
   min-height: 660px;
   padding: 42px;
@@ -499,11 +562,27 @@ h3 {
   bottom: 0;
   min-height: 0;
   width: 100%;
-  height: 62%;
+  height: 100%;
   object-fit: cover;
   object-position: center bottom;
   pointer-events: none;
-  mask-image: linear-gradient(transparent, black 22%);
+  mask-image: none;
+}
+.auth-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      #f6f5effa 0%,
+      #f6f5efe8 20%,
+      #f6f5efc9 32%,
+      #f6f5ef40 50%,
+      transparent 68%
+    ),
+    linear-gradient(90deg, #f6f5ef55, transparent 65%);
 }
 .typed-word {
   display: inline-block;
@@ -515,6 +594,17 @@ h3 {
   font-family: Arial, sans-serif;
   font-weight: 200;
   opacity: 0.6;
+  animation: caret-blink 1s steps(1, end) infinite;
+}
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 0.7;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
 }
 .auth-art .brand {
   grid-row: 1;
@@ -720,26 +810,32 @@ h3 {
   }
   .auth-page {
     grid-template-columns: 1fr;
+    align-content: start;
     padding: 12px;
   }
   .auth-art {
     min-height: 0;
-    height: auto;
-    display: grid;
+    height: 280px;
+    display: flex;
     grid-template-columns: minmax(0, 1fr) 100px;
     grid-template-rows: auto auto;
     gap: 20px 12px;
     padding: 24px;
   }
   .auth-art-image {
-    position: static;
-    mask-image: linear-gradient(to right, transparent, black 25%);
+    position: absolute;
+    mask-image: none;
     grid-column: 2;
     grid-row: 1 / 3;
     width: 100%;
-    height: 180px;
+    height: 100%;
     object-fit: cover;
-    object-position: 40% bottom;
+    object-position: center 64%;
+  }
+  .auth-art::after {
+    background:
+      linear-gradient(90deg, #f6f5effa, #f6f5efdb 43%, #f6f5ef20 80%),
+      linear-gradient(#f6f5ef80, transparent);
   }
   .auth-story {
     margin-top: 0;
@@ -1113,7 +1209,8 @@ h3 {
 .suggestion-list {
   display: grid;
   gap: 9px;
-  max-width: 370px;
+  max-width: 740px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   margin: 0 auto 24px;
 }
 .suggestion-list button {

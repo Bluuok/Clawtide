@@ -144,19 +144,20 @@ export function NavIcon({ name }: { name: string }) {
     </svg>
   );
 }
-export function ArtImage({
-  kind,
-  className = '',
-}: {
-  kind: 'stones' | 'light';
-  className?: string;
-}) {
+export type ArtKind = 'stones' | 'light' | 'coast' | 'linen';
+const artFiles: Record<ArtKind, string> = {
+  stones: 'tidal-stones',
+  light: 'light-folds',
+  coast: 'coastal-window',
+  linen: 'linen-light',
+};
+export function ArtImage({ kind, className = '' }: { kind: ArtKind; className?: string }) {
   return (
     <img
       className={`studio-art ${className}`}
-      src={`/images/${kind === 'stones' ? 'tidal-stones' : 'light-folds'}.webp`}
-      width={1536}
-      height={1024}
+      src={`/images/${artFiles[kind]}.webp`}
+      width={kind === 'coast' ? 1600 : 1536}
+      height={kind === 'coast' ? 900 : 1024}
       alt=""
       loading="lazy"
       decoding="async"
@@ -170,7 +171,7 @@ export function EmptyState({
 }: {
   title: string;
   children: ReactNode;
-  art?: 'stones' | 'light';
+  art?: ArtKind;
 }) {
   return (
     <div className={`empty-state ${art ? 'empty-state-art' : ''}`}>
