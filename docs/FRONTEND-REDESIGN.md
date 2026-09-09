@@ -19,6 +19,13 @@ The user supplies generated raster artwork. SVG/CSS decoration is the fallback.
 
 ## Follow-up refinements
 
+- Completed profiles section editing, dirty-state protection, save/discard and version restoration.
+- Completed workspace search, creation/rename feedback, pending controls and Home protection.
+- Completed admin-only provider settings, URL validation and accurate saved-key status.
+- Final verification: frontend typecheck and production build; all seven routes at desktop
+  and mobile sizes; browser fixture checks for chat, profiles, tasks, workspaces and settings.
+- Local backend health and frontend HTTP responses checked separately. Browser fixtures
+  do not verify live model execution or credentials.
 - Chat: searchable conversations, per-session in-memory drafts, mobile conversation
   browser, clipboard actions, prompt suggestions and retryable transcript loading.
 - Tasks: searchable/status-filtered lists, an accessible creation dialog, explicit

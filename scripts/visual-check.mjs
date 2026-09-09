@@ -16,6 +16,8 @@ let emptyTranscript = false;
 let createdTask = null;
 let taskCreates = 0;
 let profileSaves = 0;
+let extraWorkspace = null;
+let provider = { baseUrl: 'https://api.anthropic.com', configured: false };
 const time = '2026-09-09T04:00:00Z';
 const workspace = {
   id: 'home',
@@ -62,7 +64,14 @@ await page.route('**/*', async (route) => {
   let data;
   if (path === '/auth/me')
     data = { user: authenticated ? { id: 'u1', username: 'Alex', role: 'admin' } : null };
-  else if (path === '/workspaces') data = { workspaces: [workspace] };
+  else if (path === '/workspaces' && req.method() === 'POST') {
+    extraWorkspace = { ...workspace, id: 'w2', isHome: false, ...req.postDataJSON() };
+    data = { workspace: extraWorkspace };
+  } else if (path === '/workspaces/w2' && req.method() === 'PATCH') {
+    Object.assign(extraWorkspace, req.postDataJSON());
+    data = { workspace: extraWorkspace };
+  } else if (path === '/workspaces')
+    data = { workspaces: extraWorkspace ? [workspace, extraWorkspace] : [workspace] };
   else if (path === '/profiles/p1' && req.method() === 'PATCH') {
     const update = req.postDataJSON();
     profileSaves++;
@@ -109,9 +118,16 @@ await page.route('**/*', async (route) => {
   } else if (path === '/tasks') data = { tasks: createdTask ? [task, createdTask] : [task] };
   else if (path === '/tasks/t1/run') data = { queued: true, runId: 'test-run' };
   else if (path === '/tasks/t1' || path === '/tasks/t2') data = { runs: [] };
-  else if (path === '/settings/provider')
-    data = { provider: { baseUrl: 'https://api.anthropic.com', configured: true } };
-  else data = {};
+  else if (path === '/settings/provider') {
+    if (req.method() === 'PUT') {
+      const update = req.postDataJSON();
+      provider = {
+        baseUrl: update.baseUrl,
+        configured: provider.configured || !!update.apiKey,
+      };
+    }
+    data = { provider };
+  } else data = {};
   await route.fulfill({ json: data });
 });
 await page.routeWebSocket('**/ws', (ws) => {
@@ -245,6 +261,43 @@ for (const route of ['chat', 'profiles', 'tasks', 'workspaces', 'settings', 'log
     await page.getByText('No matching profiles.').waitFor();
     await page.getByRole('searchbox', { name: 'Find profiles' }).fill('');
     console.log('Profile sections, discard, save payload, restore and search: passed');
+  }
+  if (route === 'workspaces') {
+    assert.equal(
+      await page.getByRole('button', { name: 'Delete', exact: true }).isDisabled(),
+      true,
+    );
+    await page.getByRole('searchbox', { name: 'Find workspaces' }).fill('missing');
+    await page.getByText('No matching workspaces.').waitFor();
+    await page.getByRole('searchbox', { name: 'Find workspaces' }).fill('');
+    await page.getByRole('textbox', { name: 'New workspace name' }).fill('  Studio  ');
+    await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+    await page.getByText('Workspace created.', { exact: true }).waitFor();
+    assert.equal(extraWorkspace.displayName, 'Studio');
+    await page.getByRole('button', { name: 'Rename', exact: true }).last().click();
+    await page.getByRole('textbox', { name: 'Rename workspace' }).fill('Research studio');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByText('Workspace renamed.', { exact: true }).waitFor();
+    assert.equal(extraWorkspace.displayName, 'Research studio');
+    console.log('Workspace search, home protection, creation and rename: passed');
+  }
+  if (route === 'settings') {
+    const save = page.getByRole('button', { name: 'Save changes', exact: true });
+    assert.equal(await save.isDisabled(), true);
+    await page.getByRole('textbox', { name: 'Base URL', exact: true }).fill('invalid');
+    await save.click();
+    await page.getByRole('alert').waitFor();
+    await page
+      .getByRole('textbox', { name: 'Base URL', exact: true })
+      .fill('https://example.test');
+    await save.click();
+    await page.getByText('Settings saved.', { exact: true }).waitFor();
+    assert.equal(provider.configured, false);
+    await page.getByLabel('API key', { exact: true }).fill('fixture-only');
+    await save.click();
+    await page.getByText('API key saved', { exact: true }).waitFor();
+    assert.equal(await page.getByLabel('API key', { exact: true }).inputValue(), '');
+    console.log('Settings validation, dirty state and saved-key status: passed');
   }
   console.log(`${route}-mobile`, { overflow });
 }
