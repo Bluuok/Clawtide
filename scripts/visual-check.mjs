@@ -15,6 +15,7 @@ let failTranscript = false;
 let emptyTranscript = false;
 let createdTask = null;
 let taskCreates = 0;
+let profileSaves = 0;
 const time = '2026-09-09T04:00:00Z';
 const workspace = {
   id: 'home',
@@ -62,7 +63,26 @@ await page.route('**/*', async (route) => {
   if (path === '/auth/me')
     data = { user: authenticated ? { id: 'u1', username: 'Alex', role: 'admin' } : null };
   else if (path === '/workspaces') data = { workspaces: [workspace] };
-  else if (path === '/profiles') data = { profiles: [profile] };
+  else if (path === '/profiles/p1' && req.method() === 'PATCH') {
+    const update = req.postDataJSON();
+    profileSaves++;
+    Object.assign(profile, update.segments, {
+      name: update.name,
+      promptMode: update.promptMode,
+      version: profile.version + 1,
+      updatedAt: new Date().toISOString(),
+    });
+    data = { profile };
+  } else if (path === '/profiles/p1/versions')
+    data = { versions: [{ version: 1, created_at: time }] };
+  else if (path === '/profiles/p1/restore') {
+    Object.assign(profile, {
+      identity: 'A thoughtful research partner.',
+      version: profile.version + 1,
+      updatedAt: new Date().toISOString(),
+    });
+    data = { profile };
+  } else if (path === '/profiles') data = { profiles: [profile] };
   else if (path === '/chat/sessions')
     data = {
       sessions: [
@@ -193,6 +213,38 @@ for (const route of ['chat', 'profiles', 'tasks', 'workspaces', 'settings', 'log
     assert.equal(createdTask.contextMode, 'isolated');
     await page.getByRole('heading', { name: 'Review the weekly reading list' }).waitFor();
     console.log('Task search, status filter, date validation and creation payload: passed');
+  }
+  if (route === 'profiles') {
+    const identity = page.getByRole('textbox', { name: 'Identity', exact: true });
+    await identity.fill('A careful studio assistant.');
+    await page
+      .getByText('Unsaved changes — save or discard before switching profiles.')
+      .waitFor();
+    await page.getByRole('button', { name: /Values/ }).click();
+    await page
+      .getByRole('textbox', { name: 'Values', exact: true })
+      .fill('Stay curious and kind.');
+    await page.getByRole('button', { name: /Identity/ }).click();
+    assert.equal(await identity.inputValue(), 'A careful studio assistant.');
+    await page.getByRole('button', { name: 'Discard', exact: true }).click();
+    assert.equal(await identity.inputValue(), 'A thoughtful research partner.');
+    await identity.fill('A careful studio assistant.');
+    await page.getByRole('button', { name: 'Save (new version)', exact: true }).click();
+    await page.getByText('Saved as a new version.').waitFor();
+    assert.equal(profileSaves, 1);
+    assert.equal(profile.identity, 'A careful studio assistant.');
+    await page.getByRole('button', { name: 'Show history', exact: true }).click();
+    await page.getByRole('button', { name: 'Restore', exact: true }).click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector('textarea[aria-label="Identity"]')?.value ===
+        'A thoughtful research partner.',
+    );
+    await page.getByRole('button', { name: /Your workers.*Browse/ }).click();
+    await page.getByRole('searchbox', { name: 'Find profiles' }).fill('no-match');
+    await page.getByText('No matching profiles.').waitFor();
+    await page.getByRole('searchbox', { name: 'Find profiles' }).fill('');
+    console.log('Profile sections, discard, save payload, restore and search: passed');
   }
   console.log(`${route}-mobile`, { overflow });
 }

@@ -9,10 +9,26 @@ import { api, ApiError, type Profile, type ProfileVersion } from '../api.js';
 import { EmptyState } from '../components/Design.js';
 
 const SEGMENTS = [
-  { key: 'identity', label: 'IDENTITY — who am I' },
-  { key: 'soul', label: 'SOUL — values & bottom lines' },
-  { key: 'agents', label: 'AGENTS — working rules (declarative)' },
-  { key: 'tools', label: 'TOOLS — tool policy' },
+  {
+    key: 'identity',
+    label: 'Identity',
+    description: 'Define who your worker is, its role, and how it introduces itself.',
+  },
+  {
+    key: 'soul',
+    label: 'Values',
+    description: 'Describe its principles, tone, and boundaries.',
+  },
+  {
+    key: 'agents',
+    label: 'Working rules',
+    description: 'Set priorities, collaboration habits, and how work should be approached.',
+  },
+  {
+    key: 'tools',
+    label: 'Tools',
+    description: 'Explain when and how available tools should be used.',
+  },
 ] as const;
 
 type SegmentKey = (typeof SEGMENTS)[number]['key'];
@@ -21,11 +37,24 @@ export function ProfilesPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = profiles.find((p) => p.id === activeId) ?? null;
+  const [query, setQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
 
   const reload = useCallback(async () => {
-    const { profiles: list } = await api.get<{ profiles: Profile[] }>('/profiles');
-    setProfiles(list);
-    setActiveId((prev) => prev ?? list[0]?.id ?? null);
+    setError(null);
+    setLoading(true);
+    try {
+      const { profiles: list } = await api.get<{ profiles: Profile[] }>('/profiles');
+      setProfiles(list);
+      setActiveId((prev) => prev ?? list[0]?.id ?? null);
+    } catch {
+      setError('Could not load profiles. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -33,43 +62,96 @@ export function ProfilesPage() {
   }, [reload]);
 
   return (
-    <div className="split-page">
-      <div className="list-panel">
-        <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          My profiles
+    <div className={`split-page profiles-page ${browsing ? 'profiles-open' : ''}`}>
+      <button
+        className="session-toggle"
+        aria-expanded={browsing}
+        aria-controls="profiles-sidebar"
+        onClick={() => setBrowsing(!browsing)}
+      >
+        <span>
+          Your workers <span className="session-count">{profiles.length}</span>
+        </span>
+        <span>{browsing ? 'Close −' : 'Browse +'}</span>
+      </button>
+      <div className="list-panel profiles-sidebar" id="profiles-sidebar">
+        <div className="task-filters">
+          <span className="eyebrow">Your digital workers</span>
+          <input
+            type="search"
+            aria-label="Find profiles"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Find a profile…"
+          />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {profiles.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setActiveId(p.id)}
-              className={`block w-full px-3 py-2 text-left text-sm ${
-                p.id === activeId ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'
-              }`}
-            >
-              {p.name}
-              {p.isDefault && <span className="ml-1 text-xs text-emerald-600">default</span>}
-              <span className="block text-xs text-slate-400">
-                v{p.version} · {p.promptMode}
-              </span>
-            </button>
-          ))}
+          {profiles
+            .filter((p) => p.name.toLowerCase().includes(query.toLowerCase().trim()))
+            .map((p) => (
+              <button
+                key={p.id}
+                onClick={() => {
+                  setActiveId(p.id);
+                  setBrowsing(false);
+                }}
+                disabled={editing && p.id !== activeId}
+                aria-pressed={p.id === activeId}
+                title={
+                  editing && p.id !== activeId
+                    ? 'Save or discard your changes before switching profiles.'
+                    : p.name
+                }
+                className={`block w-full px-3 py-2 text-left text-sm ${
+                  p.id === activeId ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'
+                }`}
+              >
+                {p.name}
+                {p.isDefault && <span className="ml-1 text-xs text-emerald-600">default</span>}
+                <span className="block text-xs text-slate-400">
+                  v{p.version} · {p.promptMode}
+                </span>
+              </button>
+            ))}
+          {!loading &&
+            profiles.filter((p) => p.name.toLowerCase().includes(query.toLowerCase().trim()))
+              .length === 0 && (
+              <p className="session-help">
+                {query ? 'No matching profiles.' : 'Create your first digital worker below.'}
+              </p>
+            )}
         </div>
         <div className="border-t border-slate-200 p-2">
           <NewProfileButton
+            disabled={editing}
             onCreated={(p) => {
               setProfiles((prev) => [...prev, p]);
               setActiveId(p.id);
+              setBrowsing(false);
             }}
           />
         </div>
       </div>
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}{' '}
+          <button className="underline" onClick={() => void reload()}>
+            Retry
+          </button>
+        </p>
+      )}
       {active !== null ? (
         <ProfileEditor
+          key={active.id}
           profile={active}
+          onEditing={setEditing}
           onSaved={(p) => setProfiles((prev) => prev.map((x) => (x.id === p.id ? p : x)))}
           onReload={reload}
         />
+      ) : loading ? (
+        <div className="chat-loading" role="status">
+          Loading profiles…
+        </div>
       ) : (
         <EmptyState title="Shape your digital worker.">
           Create a profile to define its identity, values, working rules, and tools.
@@ -79,30 +161,58 @@ export function ProfilesPage() {
   );
 }
 
-function NewProfileButton({ onCreated }: { onCreated: (p: Profile) => void }) {
+function NewProfileButton({
+  onCreated,
+  disabled,
+}: {
+  onCreated: (p: Profile) => void;
+  disabled: boolean;
+}) {
   const [busy, setBusy] = useState(false);
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const create = async () => {
+    if (busy || disabled || !name.trim()) return;
+    setError(null);
     setBusy(true);
     try {
-      const n = Date.now() % 10000;
       const { profile } = await api.post<{ profile: Profile }>('/profiles', {
-        name: `Profile ${n}`,
+        name: name.trim(),
         segments: { identity: '', soul: '', agents: '', tools: '' },
         promptMode: 'append',
       });
       onCreated(profile);
+      setName('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create profile.');
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button
-      onClick={() => void create()}
-      disabled={busy}
-      className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
-    >
-      + New profile
-    </button>
+    <>
+      <input
+        aria-label="New profile name"
+        placeholder="Give your worker a name"
+        maxLength={120}
+        value={name}
+        disabled={disabled || busy}
+        onChange={(e) => setName(e.target.value)}
+        className="mb-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+      />
+      {error && (
+        <p role="alert" className="mb-2 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      <button
+        onClick={() => void create()}
+        disabled={busy || disabled || !name.trim()}
+        className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
+      >
+        {busy ? 'Creating…' : '+ New profile'}
+      </button>
+    </>
   );
 }
 
@@ -110,6 +220,7 @@ function ProfileEditor(props: {
   profile: Profile;
   onSaved: (p: Profile) => void;
   onReload: () => Promise<void>;
+  onEditing: (editing: boolean) => void;
 }) {
   const p = props.profile;
   const [name, setName] = useState(p.name);
@@ -120,7 +231,10 @@ function ProfileEditor(props: {
     agents: p.agents,
     tools: p.tools,
   });
-  const [dirty, setDirty] = useState(false);
+  const dirty =
+    name !== p.name || mode !== p.promptMode || SEGMENTS.some((s) => segs[s.key] !== p[s.key]);
+  const [section, setSection] = useState<SegmentKey>('identity');
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -128,11 +242,31 @@ function ProfileEditor(props: {
     setName(p.name);
     setMode(p.promptMode);
     setSegs({ identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools });
-    setDirty(false);
     setError(null);
   }, [p.id, p.updatedAt, p.name, p.promptMode, p.identity, p.soul, p.agents, p.tools]);
+  useEffect(() => {
+    props.onEditing(dirty || busy);
+  }, [dirty, busy, props.onEditing]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const discard = () => {
+    setName(p.name);
+    setMode(p.promptMode);
+    setSegs({ identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools });
+    setError(null);
+    setSaved(false);
+  };
 
   const save = async () => {
+    if (busy || !dirty || !name.trim()) return;
+    setSaved(false);
     setBusy(true);
     setError(null);
     try {
@@ -142,7 +276,7 @@ function ProfileEditor(props: {
         promptMode: mode,
       });
       props.onSaved(profile);
-      setDirty(false);
+      setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'save failed');
     } finally {
@@ -151,24 +285,29 @@ function ProfileEditor(props: {
   };
 
   return (
-    <div className="detail-panel">
+    <div className="detail-panel profile-detail">
       <div className="content-page space-y-4">
-        <div className="editor-toolbar">
+        <div className="profile-intro">
+          <span className="eyebrow">Profile / Version {p.version}</span>
+          <h2>Give your worker character.</h2>
+          <p>Four thoughtful pieces, one consistent way of working.</p>
+        </div>
+        <div className="editor-toolbar profile-toolbar">
           <input
             value={name}
             aria-label="Profile name"
+            disabled={busy}
             onChange={(e) => {
               setName(e.target.value);
-              setDirty(true);
             }}
             className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium"
           />
           <select
             value={mode}
             aria-label="Prompt mode"
+            disabled={busy}
             onChange={(e) => {
               setMode(e.target.value as 'append' | 'replace');
-              setDirty(true);
             }}
             className="rounded-md border border-slate-300 px-2 py-2 text-sm"
           >
@@ -177,63 +316,125 @@ function ProfileEditor(props: {
           </select>
           <button
             onClick={() => void save()}
-            disabled={!dirty || busy}
+            disabled={!dirty || busy || !name.trim()}
             className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {busy ? 'Saving…' : 'Save (new version)'}
           </button>
           <button
-            onClick={() => void props.onReload()}
-            disabled={!dirty}
+            onClick={discard}
+            disabled={!dirty || busy}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-50"
           >
             Discard
           </button>
         </div>
+        <p className={`profile-save-state ${dirty ? 'is-dirty' : ''}`} role="status">
+          {dirty
+            ? 'Unsaved changes — save or discard before switching profiles.'
+            : saved
+              ? 'Saved as a new version.'
+              : 'All changes saved.'}
+        </p>
+        <p className="session-help">
+          {mode === 'append'
+            ? 'Append adds these instructions to the base profile.'
+            : 'Replace replaces the editable base instructions. Platform rules still apply.'}
+        </p>
         {error !== null && <p className="text-sm text-red-600">{error}</p>}
-        {SEGMENTS.map((s) => (
+        <div className="profile-sections" aria-label="Profile sections">
+          {SEGMENTS.map((s) => (
+            <button
+              key={s.key}
+              aria-pressed={section === s.key}
+              onClick={() => setSection(s.key)}
+            >
+              {s.label}
+              <span>{segs[s.key].trim() ? '●' : '○'}</span>
+            </button>
+          ))}
+        </div>
+        {SEGMENTS.filter((s) => s.key === section).map((s) => (
           <div key={s.key} className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               {s.label}
             </div>
+            <p className="session-help">{s.description}</p>
             <textarea
               value={segs[s.key]}
               aria-label={s.label}
+              disabled={busy}
+              placeholder={s.description}
               onChange={(e) => {
                 setSegs((prev) => ({ ...prev, [s.key]: e.target.value }));
-                setDirty(true);
               }}
-              rows={4}
+              rows={10}
               className="w-full resize-y rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none"
             />
+            <p className="profile-character-count">
+              {segs[s.key].length.toLocaleString()} characters · {s.key.toUpperCase()}
+            </p>
           </div>
         ))}
-        <VersionHistory profile={p} onRestored={(np) => props.onSaved(np)} />
-        <DraftFlow profile={p} onPublished={() => void props.onReload()} />
+        <VersionHistory
+          key={`${p.id}-${p.version}`}
+          profile={p}
+          disabled={dirty || busy}
+          onRestored={(np) => props.onSaved(np)}
+        />
+        <details className="profile-advanced">
+          <summary>Advanced: publish a draft</summary>
+          <fieldset disabled={dirty || busy}>
+            <DraftFlow key={p.id} profile={p} onPublished={() => void props.onReload()} />
+          </fieldset>
+          {dirty && (
+            <p className="session-help">
+              Save or discard your changes before publishing a draft.
+            </p>
+          )}
+        </details>
       </div>
     </div>
   );
 }
 
-function VersionHistory(props: { profile: Profile; onRestored: (p: Profile) => void }) {
+function VersionHistory(props: {
+  profile: Profile;
+  onRestored: (p: Profile) => void;
+  disabled: boolean;
+}) {
   const [versions, setVersions] = useState<ProfileVersion[] | null>(null);
   const [busyVersion, setBusyVersion] = useState<number | null>(null);
   const p = props.profile;
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const load = async () => {
-    const { versions: v } = await api.get<{ versions: ProfileVersion[] }>(
-      `/profiles/${p.id}/versions`,
-    );
-    setVersions(v);
+    setError(null);
+    setLoading(true);
+    try {
+      const { versions: v } = await api.get<{ versions: ProfileVersion[] }>(
+        `/profiles/${p.id}/versions`,
+      );
+      setVersions(v);
+    } catch {
+      setError('Could not load version history. Please retry.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const restore = async (version: number) => {
+    if (props.disabled || busyVersion !== null) return;
+    setError(null);
     setBusyVersion(version);
     try {
       const { profile } = await api.post<{ profile: Profile }>(`/profiles/${p.id}/restore`, {
         version,
       });
       props.onRestored(profile);
+    } catch {
+      setError('Could not restore this version. Please try again.');
     } finally {
       setBusyVersion(null);
     }
@@ -243,22 +444,32 @@ function VersionHistory(props: { profile: Profile; onRestored: (p: Profile) => v
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Version history (immutable — restore writes a new version)
+          Version history
         </span>
-        <button onClick={() => void load()} className="text-xs text-slate-600 underline">
-          {versions === null ? 'Show' : 'Refresh'}
+        <button
+          disabled={loading}
+          onClick={() => void load()}
+          className="text-xs text-slate-600 underline"
+        >
+          {loading ? 'Loading…' : versions === null ? 'Show history' : 'Refresh history'}
         </button>
       </div>
+      <p className="session-help">Restoring keeps existing versions and creates a new one.</p>
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
       {versions !== null && (
         <ul className="space-y-1 text-sm">
           {versions.map((v) => (
             <li key={v.version} className="flex items-center justify-between">
               <span className="text-slate-700">
-                v{v.version} — {v.created_at}
+                v{v.version} — {new Date(v.created_at).toLocaleString()}
               </span>
               <button
                 onClick={() => void restore(v.version)}
-                disabled={busyVersion !== null}
+                disabled={props.disabled || busyVersion !== null}
                 className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 disabled:opacity-50"
               >
                 Restore

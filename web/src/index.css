@@ -671,6 +671,111 @@ h3 {
 }
 
 /* Conversation workspace refinements. */
+.profiles-page {
+  position: relative;
+}
+.profiles-sidebar {
+  width: 240px;
+}
+.profiles-page button:disabled {
+  opacity: 0.5;
+}
+.profile-intro h2 {
+  font: 400 29px var(--display);
+  letter-spacing: -0.035em;
+  margin: 8px 0;
+}
+.profile-intro p {
+  color: #62766a;
+  font-size: 12px;
+}
+.profile-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 0;
+  background: #f6f5ef;
+}
+.profile-save-state {
+  font-size: 11px;
+  color: #438778;
+}
+.profile-save-state.is-dirty {
+  color: #956321;
+}
+.profile-sections {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  background: #e9ece3;
+  border-radius: 10px;
+}
+.profile-sections button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  color: #62766a;
+}
+.profile-sections button[aria-pressed='true'] {
+  background: #fffefa;
+  color: #173f35;
+  box-shadow: 0 2px 6px #173f3508;
+}
+.profile-sections span {
+  font-size: 8px;
+  color: #438778;
+}
+.profile-character-count {
+  text-align: right;
+  color: #62766a;
+  font-size: 10px;
+  padding-top: 8px;
+}
+.profile-advanced summary {
+  cursor: pointer;
+  padding: 14px 0;
+  color: #62766a;
+  font-size: 12px;
+}
+.profile-advanced fieldset {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .profiles-page .profiles-sidebar {
+    display: none;
+  }
+  .profiles-page.profiles-open .profiles-sidebar {
+    display: flex;
+    position: absolute;
+    top: 56px;
+    bottom: 0;
+    z-index: 5;
+    width: 100%;
+    max-height: none;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    background: #f6f5ef;
+  }
+  .profiles-page .profiles-sidebar > .overflow-y-auto {
+    max-height: none;
+    flex: 1;
+  }
+  .profile-intro h2 {
+    font-size: 25px;
+  }
+  .profile-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .profile-toolbar {
+    position: static;
+  }
+}
 .tasks-sidebar {
   width: 260px;
 }
