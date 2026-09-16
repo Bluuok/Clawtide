@@ -143,7 +143,7 @@ export function TasksPage() {
               </span>
             </button>
           ))}
-          {!loading && visibleTasks.length === 0 && (
+          {!loading && !error && visibleTasks.length === 0 && (
             <div className="p-4 text-center text-sm text-slate-400">
               {tasks.length === 0
                 ? 'No tasks in this workspace.'
@@ -185,9 +185,11 @@ export function TasksPage() {
             }}
           />
         ) : (
-          <EmptyState title="Give good work a rhythm." art="stones">
-            Select a task to see its schedule and run history, or create something new.
-          </EmptyState>
+          <div className={tasks.length === 0 ? 'tasks-empty-detail' : undefined}>
+            <EmptyState title="Give good work a rhythm." art="stones">
+              Select a task to see its schedule and run history, or create something new.
+            </EmptyState>
+          </div>
         )}
       </div>
     </div>

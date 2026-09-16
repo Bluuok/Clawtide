@@ -33,12 +33,14 @@ export function LoginPage() {
         setError(
           err.code === 'rate_limited'
             ? 'Too many attempts — try again later.'
-            : err.status === 403 && err.message.includes('setup')
-              ? 'Setup not completed yet.'
-              : 'Invalid username or password.',
+            : err.status === 401
+              ? 'Invalid username or password.'
+              : err.status >= 500
+                ? 'The server could not complete the login. Please try again.'
+                : 'The login request could not be completed. Please try again.',
         );
       } else {
-        setError('Login failed.');
+        setError('Could not reach the server. Check your connection and try again.');
       }
     } finally {
       setBusy(false);
@@ -50,9 +52,28 @@ export function LoginPage() {
       <form onSubmit={submit} className="auth-form space-y-4">
         <span className="eyebrow">Welcome to your workspace</span>
         <h1>Welcome back.</h1>
-        <Field label="Username" value={username} onChange={setUsername} />
-        <Field label="Password" value={password} onChange={setPassword} type="password" />
-        {error !== null && <p className="text-sm text-red-600">{error}</p>}
+        <Field
+          label="Username"
+          name="username"
+          value={username}
+          onChange={setUsername}
+          autoComplete="username"
+          required
+        />
+        <Field
+          label="Password"
+          name="password"
+          value={password}
+          onChange={setPassword}
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+        {error !== null && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={busy}

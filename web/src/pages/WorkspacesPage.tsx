@@ -3,83 +3,115 @@
  * Home workspaces are marked and undeletable — the API rejects with 403 and
  * the UI explains why instead of showing a dead button.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type Workspace } from '../api.js';
 import { ArtImage, ConfirmAction } from '../components/Design.js';
+import { WorkspaceLoadGuard } from '../stores/workspaceLoadGuard.js';
 
 export function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const busyRef = useRef(false);
+  const loadingRef = useRef(false);
+  const loadGuard = useRef(new WorkspaceLoadGuard());
 
   const reload = useCallback(async () => {
+    if (busyRef.current || loadingRef.current) return;
+    loadingRef.current = true;
+    const loadToken = loadGuard.current.startLoad();
     setLoading(true);
+    setLoadError(null);
     try {
       const { workspaces: list } = await api.get<{ workspaces: Workspace[] }>('/workspaces');
-      setWorkspaces(list);
+      if (loadGuard.current.isCurrent(loadToken)) setWorkspaces(list);
+    } catch {
+      if (loadGuard.current.isCurrent(loadToken)) {
+        setLoadError('Could not load workspaces. Please try again.');
+      }
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void reload().catch(() => setError('Could not load workspaces. Please try again.'));
+    void reload();
   }, [reload]);
 
   const create = async () => {
-    if (busy || !displayName.trim()) return;
+    if (busyRef.current || loadingRef.current || !displayName.trim()) return;
+    busyRef.current = true;
     setBusy(true);
     setNotice(null);
-    setError(null);
+    setOperationError(null);
     try {
-      await api.post('/workspaces', { displayName: displayName.trim() });
+      const { workspace } = await api.post<{ workspace: Workspace }>('/workspaces', {
+        displayName: displayName.trim(),
+      });
+      loadGuard.current.recordMutation();
+      setWorkspaces((current) => [
+        ...current.filter((item) => item.id !== workspace.id),
+        workspace,
+      ]);
       setDisplayName('');
-      await reload();
       setQuery('');
       setNotice('Workspace created.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'create failed');
+      setOperationError(err instanceof ApiError ? err.message : 'Could not create workspace.');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
 
   const rename = async (id: string) => {
-    if (busy || !renameValue.trim()) return;
+    if (busyRef.current || loadingRef.current || !renameValue.trim()) return;
+    busyRef.current = true;
     setBusy(true);
     setNotice(null);
-    setError(null);
+    setOperationError(null);
     try {
-      await api.patch(`/workspaces/${id}`, { displayName: renameValue.trim() });
+      const { workspace } = await api.patch<{ workspace: Workspace }>(`/workspaces/${id}`, {
+        displayName: renameValue.trim(),
+      });
+      loadGuard.current.recordMutation();
+      setWorkspaces((current) =>
+        current.map((item) => (item.id === workspace.id ? workspace : item)),
+      );
       setRenaming(null);
-      await reload();
       setNotice('Workspace renamed.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'rename failed');
+      setOperationError(err instanceof ApiError ? err.message : 'Could not rename workspace.');
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
 
   const remove = async (ws: Workspace) => {
-    if (ws.isHome || busy) return;
+    if (ws.isHome || busyRef.current || loadingRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setNotice(null);
-    setError(null);
+    setOperationError(null);
     try {
       await api.delete(`/workspaces/${ws.id}`);
-      await reload();
+      loadGuard.current.recordMutation();
+      setWorkspaces((current) => current.filter((item) => item.id !== ws.id));
       setNotice('Workspace deleted.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'delete failed');
+      setOperationError(err instanceof ApiError ? err.message : 'Could not delete workspace.');
       throw err;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -100,21 +132,17 @@ export function WorkspacesPage() {
         />
         <span className="session-help">{workspaces.length} workspaces</span>
       </div>
-      {error !== null && (
+      {loadError !== null && (
         <p role="alert" className="text-sm text-red-600">
-          {error}{' '}
-          <button
-            disabled={busy}
-            className="underline"
-            onClick={() => {
-              setError(null);
-              void reload().catch(() =>
-                setError('Could not load workspaces. Please try again.'),
-              );
-            }}
-          >
-            Retry
+          {loadError}{' '}
+          <button disabled={loading} className="underline" onClick={() => void reload()}>
+            {loading ? 'Retrying…' : 'Retry'}
           </button>
+        </p>
+      )}
+      {operationError !== null && (
+        <p role="alert" className="text-sm text-red-600">
+          {operationError}
         </p>
       )}
       {notice && (
@@ -158,13 +186,13 @@ export function WorkspacesPage() {
                       value={renameValue}
                       aria-label="Rename workspace"
                       maxLength={120}
-                      disabled={busy}
+                      disabled={busy || loading}
                       onChange={(e) => setRenameValue(e.target.value)}
                       className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm"
                     />
                     <button
                       type="submit"
-                      disabled={busy || !renameValue.trim()}
+                      disabled={busy || loading || !renameValue.trim()}
                       className="rounded-md bg-slate-900 px-2 py-1 text-xs text-white"
                     >
                       Save
@@ -172,7 +200,7 @@ export function WorkspacesPage() {
                     <button
                       onClick={() => setRenaming(null)}
                       type="button"
-                      disabled={busy}
+                      disabled={busy || loading}
                       className="rounded-md border border-slate-300 px-2 py-1 text-xs"
                     >
                       Cancel
@@ -201,7 +229,7 @@ export function WorkspacesPage() {
                       setRenaming(ws.id);
                       setRenameValue(ws.displayName);
                     }}
-                    disabled={ws.isHome || busy}
+                    disabled={ws.isHome || busy || loading}
                     title={ws.isHome ? 'Rename not offered for Home' : undefined}
                     className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-40"
                   >
@@ -210,7 +238,7 @@ export function WorkspacesPage() {
                   <ConfirmAction
                     title={`Delete ${ws.displayName}?`}
                     onConfirm={() => remove(ws)}
-                    disabled={ws.isHome || busy}
+                    disabled={ws.isHome || busy || loading}
                     className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40"
                   >
                     This workspace will be removed. Home workspaces are protected.
@@ -238,7 +266,7 @@ export function WorkspacesPage() {
         <input
           aria-label="New workspace name"
           maxLength={120}
-          disabled={busy}
+          disabled={busy || loading}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="New workspace name"
@@ -246,7 +274,7 @@ export function WorkspacesPage() {
         />
         <button
           type="submit"
-          disabled={busy || displayName.trim().length === 0}
+          disabled={busy || loading || displayName.trim().length === 0}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
           Create workspace

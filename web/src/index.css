@@ -465,6 +465,23 @@ h3 {
   line-height: 1.7;
   max-width: 330px;
 }
+.empty-action {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+}
+.empty-action .empty-state {
+  width: 100%;
+}
+.empty-action > button {
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.sidebar-backdrop {
+  display: none;
+}
 .chat-column {
   display: flex;
   flex-direction: column;
@@ -534,7 +551,7 @@ h3 {
 }
 .composer-footer small {
   font-size: 10px;
-  color: #7b8c7f;
+  color: #4f675a;
 }
 .auth-page {
   min-height: 100dvh;
@@ -673,7 +690,7 @@ h3 {
 .auth-footnote {
   margin-top: 40px;
   font-size: 11px;
-  color: #7b8c7f;
+  color: #4f675a;
 }
 .confirm-dialog {
   margin: auto;
@@ -726,34 +743,58 @@ h3 {
   .app-sidebar {
     width: 100%;
     padding: 10px 14px;
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
     align-items: center;
-    gap: 12px;
+    gap: 8px 12px;
+    overflow: visible;
   }
   .app-sidebar .brand {
-    font-size: 0;
-    gap: 0;
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    font-size: 21px;
+    gap: 8px;
   }
   .app-sidebar .brand svg {
     width: 28px;
+    height: 28px;
   }
   .brand-subtitle,
   .account-name {
     display: none;
   }
   .app-nav {
-    display: flex;
-    flex: 1;
-    justify-content: center;
-    gap: 2px;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns:
+      minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.85fr)
+      minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 3px;
   }
   .app-nav a {
-    padding: 10px;
+    min-width: 0;
+    min-height: 48px;
+    padding: 5px 2px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
   }
   .app-nav a span {
-    display: none;
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    color: inherit;
+    font-size: 10px;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .sidebar-bottom {
+    grid-column: 2;
+    grid-row: 1;
     padding: 0;
     margin: 0;
     border: 0;
@@ -762,6 +803,7 @@ h3 {
     width: auto;
     font-size: 10px;
     padding: 0 8px;
+    min-height: 44px;
   }
   .page-header {
     padding: 18px 18px 16px;
@@ -856,6 +898,33 @@ h3 {
   }
   .composer-footer small {
     max-width: 170px;
+  }
+}
+@media (max-width: 760px) and (max-height: 700px) {
+  .auth-page {
+    gap: 10px;
+    padding: 8px;
+  }
+  .auth-art {
+    height: 160px;
+    padding: 16px;
+  }
+  .auth-art .brand {
+    font-size: 22px;
+  }
+  .auth-story h2 {
+    margin: 8px 0 0;
+    font-size: 23px;
+  }
+  .auth-content {
+    padding: 12px;
+  }
+  .auth-form h1 {
+    margin-bottom: 12px;
+    font-size: 28px;
+  }
+  .auth-footnote {
+    margin-top: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1033,6 +1102,18 @@ h3 {
   min-width: 0;
 }
 @media (max-width: 760px) {
+  .sidebar-backdrop {
+    position: absolute;
+    z-index: 4;
+    inset: 56px 0 0;
+    display: block;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 12px;
+    background: #173f3560;
+    backdrop-filter: blur(2px);
+  }
   .profiles-page .profiles-sidebar {
     display: none;
   }
@@ -1042,7 +1123,9 @@ h3 {
     top: 56px;
     bottom: 0;
     z-index: 5;
-    width: 100%;
+    left: 0;
+    width: calc(100% - 28px);
+    max-width: 360px;
     max-height: none;
     border: 1px solid var(--line);
     border-radius: 12px;
@@ -1213,6 +1296,44 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   margin: 0 auto 24px;
 }
+.chat-empty .empty-state {
+  min-height: 0;
+  padding: 0 12px 16px;
+}
+.chat-empty .empty-art {
+  height: 150px;
+  margin-bottom: 8px;
+}
+.chat-empty .empty-state h2 {
+  margin: 8px 0;
+}
+@media (max-width: 760px) {
+  .chat-empty .empty-art {
+    height: 80px;
+    margin-bottom: 4px;
+  }
+  .chat-empty .empty-state {
+    padding: 0 4px 12px;
+  }
+  .chat-empty .empty-state h2 {
+    font-size: 24px;
+    margin: 6px 0;
+  }
+  .chat-empty .empty-state p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .tasks-empty-detail {
+    display: none;
+  }
+  .tasks-page .tasks-sidebar {
+    max-height: none;
+    flex-shrink: 0;
+  }
+  .tasks-page .tasks-sidebar > .overflow-y-auto {
+    max-height: 200px;
+  }
+}
 .suggestion-list button {
   display: flex;
   justify-content: space-between;
@@ -1323,7 +1444,8 @@ h3 {
     top: 56px;
     bottom: 0;
     left: 0;
-    width: 100%;
+    width: calc(100% - 28px);
+    max-width: 360px;
     max-height: none;
     padding: 16px;
     border: 1px solid var(--line);
@@ -1346,5 +1468,109 @@ h3 {
   }
   .chat-page .chat-composer {
     padding: 12px;
+  }
+}
+
+/* Give the conversation the remaining viewport; keep the composer in flow. */
+@media (max-width: 760px) {
+  .chat-page {
+    gap: 8px;
+  }
+  .chat-page .chat-column {
+    min-height: 0;
+  }
+  .chat-page .session-toggle {
+    min-height: 44px;
+  }
+  .chat-page .chat-heading {
+    padding-bottom: 8px;
+  }
+  .chat-page .chat-transcript {
+    padding: 12px 0;
+  }
+  .chat-page .chat-composer {
+    margin-top: 6px;
+  }
+  .chat-page .composer-footer button {
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 650px) {
+  .app-shell:has(.chat-page) .page-header {
+    padding: 8px 18px;
+  }
+  .app-shell:has(.chat-page) .page-header .eyebrow {
+    display: none;
+  }
+  .app-shell:has(.chat-page) .page-header h1 {
+    margin: 0;
+    font-size: 22px;
+  }
+  .app-shell:has(.chat-page) .page-outlet {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .chat-page .chat-heading p {
+    display: none;
+  }
+  .chat-page .chat-heading h2 {
+    font-size: 18px;
+  }
+  .chat-page .chat-empty .empty-art {
+    display: none;
+  }
+  .chat-page .chat-composer {
+    padding: 8px;
+  }
+  .chat-page .chat-composer textarea {
+    height: 44px;
+    min-height: 44px;
+  }
+  .chat-page .composer-footer {
+    margin-top: 4px;
+  }
+}
+
+/* Landscape / reduced visual height: retain every navigation destination and
+   logout, but remove duplicate branding and headings before shrinking chat. */
+@media (max-width: 760px) and (max-height: 500px) {
+  .app-shell:has(.chat-page) .app-sidebar {
+    grid-template-columns: minmax(0, 1fr) 60px;
+    grid-template-rows: auto;
+    gap: 6px;
+    padding: 6px 10px;
+  }
+  .app-shell:has(.chat-page) .app-sidebar .brand,
+  .app-shell:has(.chat-page) .page-header,
+  .chat-page .chat-heading {
+    display: none;
+  }
+  .app-shell:has(.chat-page) .app-nav {
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .app-shell:has(.chat-page) .sidebar-bottom {
+    display: contents;
+  }
+  .app-shell:has(.chat-page) .logout {
+    grid-column: 2;
+    grid-row: 1;
+    width: 60px;
+  }
+  .app-shell:has(.chat-page) .sidebar-bottom > [role='alert'] {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .chat-page {
+    min-height: 250px;
+  }
+  .chat-page.sessions-open .conversation-sidebar {
+    top: 52px;
+    overflow-y: auto;
+  }
+  .chat-page.sessions-open .conversation-sidebar > .session-results {
+    flex: 1 0 44px;
   }
 }

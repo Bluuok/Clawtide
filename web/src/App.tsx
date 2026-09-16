@@ -18,6 +18,7 @@ import { AppLayout } from './pages/AppLayout.js';
 export default function App() {
   const user = useSession((s) => s.user);
   const checked = useSession((s) => s.checked);
+  const bootstrapError = useSession((s) => s.bootstrapError);
   const bootstrap = useSession((s) => s.bootstrap);
   const location = useLocation();
 
@@ -28,6 +29,25 @@ export default function App() {
   if (!checked) {
     return (
       <div className="flex h-screen items-center justify-center text-slate-500">Loading…</div>
+    );
+  }
+
+  if (bootstrapError !== null) {
+    return (
+      <main className="flex h-screen items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-semibold">Clawtide is unavailable</h1>
+          <p role="alert" className="mt-2 text-sm text-red-600">
+            {bootstrapError}
+          </p>
+          <button
+            className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            onClick={() => void bootstrap()}
+          >
+            Retry
+          </button>
+        </div>
+      </main>
     );
   }
 

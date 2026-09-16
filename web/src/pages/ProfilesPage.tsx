@@ -4,9 +4,10 @@
  * (create draft → confirm phrase → publish). Single Anthropic profile per
  * user; promptMode controls append vs replace merge semantics.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type Profile, type ProfileVersion } from '../api.js';
 import { ArtImage, EmptyState } from '../components/Design.js';
+import { useMobileSidebar } from '../hooks/useMobileSidebar.js';
 
 const SEGMENTS = [
   {
@@ -41,7 +42,8 @@ export function ProfilesPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [browsing, setBrowsing] = useState(false);
+  const sidebar = useMobileSidebar();
+  const newProfileRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -62,22 +64,32 @@ export function ProfilesPage() {
   }, [reload]);
 
   return (
-    <div className={`split-page profiles-page ${browsing ? 'profiles-open' : ''}`}>
+    <div className={`split-page profiles-page ${sidebar.open ? 'profiles-open' : ''}`}>
       <button
+        ref={sidebar.toggleRef}
         className="session-toggle"
-        aria-expanded={browsing}
+        aria-expanded={sidebar.open}
         aria-controls="profiles-sidebar"
-        onClick={() => setBrowsing(!browsing)}
+        onClick={sidebar.toggle}
       >
         <span>
           Your workers <span className="session-count">{profiles.length}</span>
         </span>
-        <span>{browsing ? 'Close −' : 'Browse +'}</span>
+        <span>{sidebar.open ? 'Close −' : 'Browse +'}</span>
       </button>
-      <div className="list-panel profiles-sidebar" id="profiles-sidebar">
+      {sidebar.open && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close profiles panel"
+          onClick={() => sidebar.close()}
+        />
+      )}
+      <div ref={sidebar.panelRef} className="list-panel profiles-sidebar" id="profiles-sidebar">
         <div className="task-filters">
           <span className="eyebrow">Your digital workers</span>
           <input
+            ref={sidebar.primaryFocusRef as React.RefObject<HTMLInputElement | null>}
             type="search"
             aria-label="Find profiles"
             value={query}
@@ -93,7 +105,7 @@ export function ProfilesPage() {
                 key={p.id}
                 onClick={() => {
                   setActiveId(p.id);
-                  setBrowsing(false);
+                  sidebar.close();
                 }}
                 disabled={editing && p.id !== activeId}
                 aria-pressed={p.id === activeId}
@@ -123,11 +135,12 @@ export function ProfilesPage() {
         </div>
         <div className="border-t border-slate-200 p-2">
           <NewProfileButton
+            inputRef={newProfileRef}
             disabled={editing}
             onCreated={(p) => {
               setProfiles((prev) => [...prev, p]);
               setActiveId(p.id);
-              setBrowsing(false);
+              sidebar.close();
             }}
           />
         </div>
@@ -153,9 +166,17 @@ export function ProfilesPage() {
           Loading profiles…
         </div>
       ) : (
-        <EmptyState title="Shape your digital worker." art="linen">
-          Create a profile to define its identity, values, working rules, and tools.
-        </EmptyState>
+        <div className="empty-action">
+          <EmptyState title="Shape your digital worker." art="linen">
+            Create a profile to define its identity, values, working rules, and tools.
+          </EmptyState>
+          <button
+            className="min-h-11 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            onClick={() => sidebar.openAndFocus(newProfileRef.current)}
+          >
+            Create a profile
+          </button>
+        </div>
       )}
     </div>
   );
@@ -164,9 +185,11 @@ export function ProfilesPage() {
 function NewProfileButton({
   onCreated,
   disabled,
+  inputRef,
 }: {
   onCreated: (p: Profile) => void;
   disabled: boolean;
+  inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
@@ -192,6 +215,7 @@ function NewProfileButton({
   return (
     <>
       <input
+        ref={inputRef}
         aria-label="New profile name"
         placeholder="Give your worker a name"
         maxLength={120}

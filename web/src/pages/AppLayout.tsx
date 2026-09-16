@@ -2,12 +2,12 @@
  * Post-auth layout: sidebar navigation + connection banner + content outlet.
  * The chat store's WS connection lives for the whole authenticated session.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router';
 import { NavIcon, TideMark } from '../components/Design.js';
 import { useSession } from '../stores/session.js';
 import { useChat } from '../stores/chat.js';
-import { api } from '../api.js';
+import { api, ApiError, type PublicUser } from '../api.js';
 
 const NAV = [
   { to: '/chat', label: 'Chat' },
@@ -27,6 +27,8 @@ export function AppLayout() {
   const reconnectAttempt = useChat((s) => s.reconnectAttempt);
   const connect = useChat((s) => s.connect);
   const disconnect = useChat((s) => s.disconnect);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
     connect();
@@ -34,10 +36,33 @@ export function AppLayout() {
   }, [connect, disconnect]);
 
   const logout = async () => {
-    await api.post('/auth/logout');
-    disconnect();
-    setUser(null);
-    navigate('/login');
+    if (logoutBusy) return;
+    setLogoutBusy(true);
+    setLogoutError(null);
+    try {
+      await api.post('/auth/logout');
+      disconnect();
+      setUser(null);
+      navigate('/login');
+    } catch {
+      // The server may have revoked the session before its response was lost.
+      let signedOut = false;
+      try {
+        const { user: currentUser } = await api.get<{ user: PublicUser | null }>('/auth/me');
+        signedOut = currentUser === null;
+      } catch (err) {
+        signedOut = err instanceof ApiError && err.status === 401;
+      }
+      if (signedOut) {
+        disconnect();
+        setUser(null);
+        navigate('/login');
+      } else {
+        setLogoutError('Could not confirm logout. Please try again.');
+      }
+    } finally {
+      setLogoutBusy(false);
+    }
   };
 
   return (
@@ -61,8 +86,13 @@ export function AppLayout() {
             <span className="account-avatar">{user?.username.slice(0, 1).toUpperCase()}</span>
             {user?.username}
           </div>
-          <button onClick={() => void logout()} className="logout">
-            Log out
+          {logoutError !== null && (
+            <p role="alert" className="text-xs text-red-200">
+              {logoutError}
+            </p>
+          )}
+          <button onClick={() => void logout()} disabled={logoutBusy} className="logout">
+            {logoutBusy ? 'Logging out…' : logoutError ? 'Retry log out' : 'Log out'}
           </button>
         </div>
       </aside>

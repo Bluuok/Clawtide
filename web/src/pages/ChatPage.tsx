@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Session, type Workspace } from '../api.js';
 import { useChat, type ChatEntry } from '../stores/chat.js';
 import { EmptyState } from '../components/Design.js';
+import { useMobileSidebar } from '../hooks/useMobileSidebar.js';
 
 /** Number of trailing entries rendered by default; grows as the user scrolls up. */
 const WINDOW_STEP = 50;
@@ -22,7 +23,8 @@ export function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const sidebar = useMobileSidebar();
+  const createSessionRef = useRef<HTMLSelectElement>(null);
   const activeSession = sessions.find((s) => s.id === activeId);
   const activeWorkspace = workspaces.find((w) => w.id === activeSession?.workspaceId);
   const setDraft = (value: string) => {
@@ -61,7 +63,7 @@ export function ChatPage() {
       });
       setSessions((prev) => [...prev, session]);
       setActiveId(session.id);
-      setSessionsOpen(false);
+      sidebar.close();
     } catch {
       setError('Could not create a conversation. Please try again.');
     } finally {
@@ -70,25 +72,37 @@ export function ChatPage() {
   };
 
   return (
-    <div className={`split-page chat-page ${sessionsOpen ? 'sessions-open' : ''}`}>
+    <div className={`split-page chat-page ${sidebar.open ? 'sessions-open' : ''}`}>
       <button
+        ref={sidebar.toggleRef}
         className="session-toggle"
-        aria-expanded={sessionsOpen}
+        aria-expanded={sidebar.open}
         aria-controls="conversation-sidebar"
-        onClick={() => setSessionsOpen(!sessionsOpen)}
+        onClick={sidebar.toggle}
       >
         <span>
           Conversations <span className="session-count">{sessions.length}</span>
         </span>
-        <span>{sessionsOpen ? 'Close −' : 'Browse +'}</span>
+        <span>{sidebar.open ? 'Close −' : 'Browse +'}</span>
       </button>
+      {sidebar.open && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close conversations panel"
+          onClick={() => sidebar.close()}
+        />
+      )}
       <SessionSidebar
+        panelRef={sidebar.panelRef}
+        searchRef={sidebar.primaryFocusRef}
+        createRef={createSessionRef}
         sessions={sessions}
         workspaces={workspaces}
         activeId={activeId}
         onSelect={(id) => {
           setActiveId(id);
-          setSessionsOpen(false);
+          sidebar.close();
         }}
         onCreate={(id) => void createSession(id)}
         loading={loading}
@@ -112,19 +126,31 @@ export function ChatPage() {
           </p>
         </header>
         {activeId !== null ? (
-          <Transcript key={activeId} sessionId={activeId} onSuggestion={setDraft} />
+          <Transcript
+            key={`transcript-${activeId}`}
+            sessionId={activeId}
+            onSuggestion={setDraft}
+          />
         ) : loading ? (
           <div className="chat-loading" role="status">
             Opening your workspace…
           </div>
         ) : (
-          <EmptyState title="What is on your mind?" art="light">
-            Choose a workspace to start a conversation with your digital worker.
-          </EmptyState>
+          <div className="empty-action">
+            <EmptyState title="What is on your mind?" art="light">
+              Choose a workspace to start a conversation with your digital worker.
+            </EmptyState>
+            <button
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+              onClick={() => sidebar.openAndFocus(createSessionRef.current)}
+            >
+              Start a conversation
+            </button>
+          </div>
         )}
         {activeId !== null && (
           <Composer
-            key={activeId}
+            key={`composer-${activeId}`}
             disabled={false}
             onSend={async (text) => {
               await useChat.getState().sendChat(activeId, text);
@@ -139,6 +165,9 @@ export function ChatPage() {
 }
 
 function SessionSidebar(props: {
+  panelRef: React.RefObject<HTMLDivElement | null>;
+  searchRef: React.RefObject<HTMLElement | null>;
+  createRef: React.RefObject<HTMLSelectElement | null>;
   sessions: Session[];
   workspaces: Workspace[];
   activeId: string | null;
@@ -155,13 +184,18 @@ function SessionSidebar(props: {
       return `${name} ${s.id}`.toLowerCase().includes(query.trim().toLowerCase());
     });
   return (
-    <div className="list-panel conversation-sidebar" id="conversation-sidebar">
+    <div
+      ref={props.panelRef}
+      className="list-panel conversation-sidebar"
+      id="conversation-sidebar"
+    >
       <div className="conversation-sidebar-head">
         <div className="conversation-sidebar-title">
           <span className="eyebrow">Conversations</span>
           <span className="session-count">{props.sessions.length}</span>
         </div>
         <input
+          ref={props.searchRef as React.RefObject<HTMLInputElement | null>}
           type="search"
           aria-label="Find conversations"
           placeholder="Find a conversation…"
@@ -209,6 +243,7 @@ function SessionSidebar(props: {
             : 'Start something new'}
         </p>
         <select
+          ref={props.createRef}
           disabled={props.creating || props.loading || props.workspaces.length === 0}
           aria-label="Create a conversation in workspace"
           className="mb-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
@@ -277,14 +312,16 @@ function Transcript({
   // fragments arrive frequently, so this must not fight the user's scroll.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el !== null && pinnedRef.current) el.scrollTop = el.scrollHeight;
+    if (el !== null && pinnedRef.current && visible.length > 0) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [visible]);
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (el === null) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    setShowLatest(!pinnedRef.current);
+    setShowLatest(all.length > 0 && !pinnedRef.current);
     // Scrolled to the top with history hidden → reveal more.
     if (el.scrollTop <= 0 && hiddenCount > 0) {
       setWindowSize((w) => w + WINDOW_STEP);
@@ -321,7 +358,7 @@ function Transcript({
             </div>
           )}
           {!loading && !error && visible.length === 0 && (
-            <>
+            <div className="chat-empty">
               <EmptyState title="Begin with a thought." art="light">
                 Ask a question, explore an idea, or plan your next step.
               </EmptyState>
@@ -337,11 +374,11 @@ function Transcript({
                   </button>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
-      {showLatest && (
+      {all.length > 0 && showLatest && (
         <button
           className="latest-messages"
           onClick={() => {
