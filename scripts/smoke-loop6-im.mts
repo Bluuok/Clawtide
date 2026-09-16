@@ -105,7 +105,7 @@ async function main(): Promise<void> {
         adapter = new FeishuAdapter({ ...creds, accountId: row.id });
       }
       if (adapter === undefined) continue;
-      server.services.imManager.register(adapter);
+      server.services.imManager.register(row.id, adapter);
       try {
         await adapter.start(async () => undefined);
         started.push(row.channel);

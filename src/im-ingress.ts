@@ -18,6 +18,7 @@ import { buildSystemPrompt } from './prompt-plan.js';
 import { toStreamEventEnvelope } from './agent-runtime.js';
 import type { WsHub } from './ws.js';
 import { canAccessGroup, type WorkspaceResource } from './rbac.js';
+import type { AgentProfileStore } from './stores/agent-profiles.js';
 
 interface ChannelAccountRow {
   id: string;
@@ -32,6 +33,7 @@ export interface ImIngressDeps {
   logger: Logger;
   manager: ImManager;
   runtime: AgentRuntime;
+  profileStore: AgentProfileStore;
   workspaceStore: {
     byId(id: string): WorkspaceResource | undefined;
   };
@@ -58,15 +60,19 @@ export class ImIngress {
       log.warn({ accountId: msg.accountId }, 'unknown channel account; dropped');
       return;
     }
+    if (account.channel !== msg.channel) {
+      log.warn(
+        { accountId: msg.accountId, accountChannel: account.channel },
+        'channel mismatch; dropped',
+      );
+      return;
+    }
 
     // Owner Gate before anything else: destructive commands always require the
     // owner; regular traffic depends on the audience mode. Silent drop — no
     // reply, no error surface.
     const mode = this.deps.audienceMode?.(account) ?? 'everyone';
-    const command =
-      msg.text !== undefined && msg.text.startsWith('/')
-        ? (msg.text.slice(1).split(/\s+/)[0] ?? undefined)
-        : undefined;
+    const command = msg.text;
     const verdict = checkOwnerGate({
       senderId: msg.senderId,
       ownerImId: account.owner_im_id,
@@ -78,12 +84,16 @@ export class ImIngress {
       return;
     }
 
-    const resolution = await manager.handleInbound(msg);
-    if (resolution === undefined) return; // unmounted: already warned
-
-    const workspaceId = resolution.workspaceId;
+    // Inspect the persisted mount before session allocation so invalid or
+    // foreign bindings cannot create a runtime session as a side effect.
+    const mounted = manager.mountForMessage(msg);
+    if (mounted === undefined) {
+      log.warn({ accountId: msg.accountId }, 'conversation not mounted; dropped');
+      return;
+    }
+    const workspaceId = mounted.target_workspace_id;
     if (workspaceId === null) {
-      log.warn({ mountId: resolution.mountId }, 'mount without workspace; dropped');
+      log.warn({ mountId: mounted.id }, 'mount without workspace; dropped');
       return;
     }
     const wsRow = this.deps.workspaceStore.byId(workspaceId);
@@ -104,6 +114,9 @@ export class ImIngress {
       return;
     }
 
+    const resolution = await manager.handleInbound(msg);
+    if (resolution === undefined || resolution.workspaceId !== workspaceId) return;
+
     // Session: direct/thread mounts carry a persisted one; group mounts use
     // the workspace's most recent session, creating one when none exists
     // (same convention as scheduled group runs).
@@ -114,7 +127,13 @@ export class ImIngress {
     }
 
     const profile =
-      session.profile_id !== null ? runtime.profileById(session.profile_id) : undefined;
+      session.profile_id !== null
+        ? this.deps.profileStore.byIdFor(account.user_id, session.profile_id)
+        : undefined;
+    if (session.profile_id !== null && profile === undefined) {
+      log.debug({ sessionId: session.id }, 'session profile denied; dropped');
+      return;
+    }
     const systemPrompt =
       profile !== undefined
         ? buildSystemPrompt({ ...profile, prompt_mode: profile.prompt_mode })
@@ -145,6 +164,7 @@ export class ImIngress {
       try {
         await manager.send(
           msg.channel,
+          msg.accountId,
           {
             conversation: {
               kind: msg.conversation.kind,
@@ -157,7 +177,10 @@ export class ImIngress {
           { kind: 'text', text: finalText },
         );
       } catch (err) {
-        log.error({ err, channel: msg.channel }, 'outbound reply failed');
+        log.error(
+          { err, channel: msg.channel, accountId: msg.accountId },
+          'outbound reply failed',
+        );
       }
     }
   }
@@ -168,7 +191,10 @@ export class ImIngress {
     workspaceId: string,
   ): AgentSessionRow | undefined {
     const { runtime } = this.deps;
-    if (sessionId !== null) return runtime.sessionById(sessionId);
+    if (sessionId !== null) {
+      const session = runtime.sessionById(sessionId);
+      return session?.workspace_id === workspaceId ? session : undefined;
+    }
     const existing = runtime.sessionsForWorkspace(workspaceId).at(-1);
     return existing ?? runtime.createSession({ workspaceId });
   }
@@ -188,9 +214,7 @@ function resolveSiblingHome(db: AppDb, folder: string): (f: string) => string | 
 /** SessionAllocator backed by the runtime (first-occupancy persistence). */
 export function runtimeSessionAllocator(runtime: AgentRuntime): SessionAllocator {
   return {
-    createSession: (workspaceId: string) => {
-      const session = runtime.createSession({ workspaceId });
-      return { id: session.id };
-    },
+    createSession: (workspaceId: string) => runtime.createSession({ workspaceId }),
+    sessionById: (sessionId: string) => runtime.sessionById(sessionId),
   };
 }

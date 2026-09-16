@@ -184,6 +184,7 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       workspaceStore: svc.workspaceStore,
       profileStore: svc.profileStore,
       wsHub: svc.wsHub,
+      logger: deps.logger,
       refreshProvider: svc.refreshProvider,
     });
     registerTaskRoutes(app, {

@@ -18,10 +18,11 @@ import { toStreamEventEnvelope } from '../agent-runtime.js';
 import { buildSystemPrompt } from '../prompt-plan.js';
 import type { WsHub } from '../ws.js';
 import type { AppEnv } from '../web.js';
+import type { Logger } from 'pino';
 
 const createSessionSchema = z.object({
   workspaceId: z.string().min(1),
-  profileId: z.string().optional(),
+  profileId: z.string().min(1).optional(),
 });
 const turnSchema = z.object({ content: z.string().min(1).max(100_000) });
 
@@ -30,12 +31,13 @@ export interface ChatRoutesDeps {
   workspaceStore: WorkspaceStore;
   profileStore: AgentProfileStore;
   wsHub: WsHub;
+  logger: Logger;
   /** Re-reads the layered provider config before each turn (settings chain). */
   refreshProvider?: () => void;
 }
 
 export function registerChatRoutes(app: Hono<AppEnv>, deps: ChatRoutesDeps): void {
-  const { runtime, workspaceStore, profileStore, wsHub, refreshProvider } = deps;
+  const { runtime, workspaceStore, profileStore, wsHub, logger, refreshProvider } = deps;
 
   const requireAccessibleWorkspace = (
     user: { id: string; role: 'admin' | 'member' },
@@ -67,6 +69,9 @@ export function registerChatRoutes(app: Hono<AppEnv>, deps: ChatRoutesDeps): voi
     const ws = requireAccessibleWorkspace(user, body.workspaceId);
     // Profile defaults to the user's active default profile when not given.
     const profileId = body.profileId ?? profileStore.defaultFor(user.id)?.id;
+    if (profileId !== undefined && profileStore.byIdFor(user.id, profileId) === undefined) {
+      throw new WebError('not_found', 'profile not found');
+    }
     const session = runtime.createSession({ workspaceId: ws.id, profileId });
     return c.json({ session: toSessionApi(session) }, 201);
   });
@@ -99,19 +104,36 @@ export function registerChatRoutes(app: Hono<AppEnv>, deps: ChatRoutesDeps): voi
     const body = turnSchema.parse(await c.req.json());
     refreshProvider?.();
     const profile = session.profile_id
-      ? profileStore.byId(session.profile_id)
+      ? profileStore.byIdFor(user.id, session.profile_id)
       : profileStore.defaultFor(user.id);
+    if (session.profile_id !== null && profile === undefined) {
+      throw new WebError('not_found', 'profile not found');
+    }
     const opts = {
       systemPrompt: profile !== undefined ? buildSystemPrompt(profile) : undefined,
     };
-    runtime.sendMessage(
-      session,
-      body.content,
-      (event) => {
-        wsHub.broadcastToUser(user.id, toStreamEventEnvelope(event));
-      },
-      opts,
-    );
+    void runtime
+      .sendMessage(
+        session,
+        body.content,
+        (event) => {
+          wsHub.broadcastToUser(user.id, toStreamEventEnvelope(event));
+        },
+        opts,
+      )
+      .catch((err) => {
+        logger.error({ err, userId: user.id, sessionId: session.id }, 'http chat turn failed');
+        const ts = new Date().toISOString();
+        wsHub.broadcastToUser(
+          user.id,
+          toStreamEventEnvelope({
+            type: 'error',
+            sessionId: session.id,
+            message: 'agent turn failed',
+            ts,
+          }),
+        );
+      });
     return c.json({ enqueued: true, sessionId: session.id });
   });
 }

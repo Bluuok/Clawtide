@@ -40,11 +40,12 @@ export interface MountResolution {
 }
 
 export interface SessionAllocator {
-  createSession(workspaceId: string): { id: string };
+  createSession(workspaceId: string): { id: string; workspace_id?: string };
+  sessionById(sessionId: string): { id: string; workspace_id: string } | undefined;
 }
 
 export class ImManager {
-  private readonly adapters = new Map<ChannelId, ImChannelAdapter>();
+  private readonly adapters = new Map<string, ImChannelAdapter>();
 
   constructor(
     private readonly db: AppDb,
@@ -52,21 +53,25 @@ export class ImManager {
     private readonly sessions: SessionAllocator,
   ) {}
 
-  register(adapter: ImChannelAdapter): void {
-    this.adapters.set(adapter.channel, adapter);
+  register(accountId: string, adapter: ImChannelAdapter): void {
+    this.adapters.set(this.adapterKey(adapter.channel, accountId), adapter);
   }
 
-  adapter(channel: ChannelId): ImChannelAdapter | undefined {
-    return this.adapters.get(channel);
+  adapter(channel: ChannelId, accountId: string): ImChannelAdapter | undefined {
+    return this.adapters.get(this.adapterKey(channel, accountId));
   }
 
   /** Registered adapters (smoke/diagnostic iteration over the registry). */
-  adaptersSnapshot(): Array<[ChannelId, ImChannelAdapter]> {
-    return [...this.adapters.entries()];
+  adaptersSnapshot(): Array<[ChannelId, string, ImChannelAdapter]> {
+    return [...this.adapters.entries()].map(([key, adapter]) => [
+      adapter.channel,
+      key.slice(adapter.channel.length + 1),
+      adapter,
+    ]);
   }
 
   registeredChannels(): ChannelId[] {
-    return [...this.adapters.keys()];
+    return [...this.adapters.values()].map((adapter) => adapter.channel);
   }
 
   /** Start every registered adapter; inbound flows into handleInbound. */
@@ -125,19 +130,16 @@ export class ImManager {
    */
   resolveMount(msg: InboundMessage): MountResolution | undefined {
     const account = this.db.db
-      .prepare('SELECT * FROM channel_accounts WHERE id = ?')
-      .get(msg.accountId) as { id: string; user_id: string } | undefined;
-    if (account === undefined) {
+      .prepare('SELECT id, user_id, channel FROM channel_accounts WHERE id = ?')
+      .get(msg.accountId) as { id: string; user_id: string; channel: string } | undefined;
+    if (account === undefined || account.channel !== msg.channel) {
       this.logger.warn(
         { channel: msg.channel, accountId: msg.accountId },
         'unknown channel account',
       );
       return undefined;
     }
-    const jid =
-      msg.conversation.threadId !== undefined
-        ? `${msg.conversation.jid}#${msg.conversation.threadId}`
-        : msg.conversation.jid;
+    const jid = this.conversationKey(msg);
     const existing = this.mountByAccountAndJid(msg.accountId, jid);
     if (existing === undefined) {
       this.logger.warn({ channel: msg.channel, jid }, 'conversation not mounted; dropped');
@@ -154,7 +156,20 @@ export class ImManager {
     // Direct (or thread) conversation: resolve-or-create the session once,
     // then persist it so later messages reuse the same runtime context.
     let sessionId = existing.target_session_id;
-    if (sessionId === null) {
+    if (sessionId !== null) {
+      const session = this.sessions.sessionById(sessionId);
+      if (
+        session === undefined ||
+        existing.target_workspace_id === null ||
+        session.workspace_id !== existing.target_workspace_id
+      ) {
+        this.logger.warn(
+          { mountId: existing.id, sessionId },
+          'mounted session mismatch; dropped',
+        );
+        return undefined;
+      }
+    } else {
       const workspaceId = existing.target_workspace_id;
       if (workspaceId === null) {
         this.logger.warn({ mountId: existing.id }, 'direct mount without workspace; dropped');
@@ -173,6 +188,11 @@ export class ImManager {
     };
   }
 
+  /** Read a mount without allocating a session (used before RBAC admission). */
+  mountForMessage(msg: InboundMessage): ChannelMountRow | undefined {
+    return this.mountByAccountAndJid(msg.accountId, this.conversationKey(msg));
+  }
+
   /** Entry point wired into every adapter's start(). */
   async handleInbound(msg: InboundMessage): Promise<MountResolution | undefined> {
     const resolution = this.resolveMount(msg);
@@ -181,11 +201,24 @@ export class ImManager {
 
   async send(
     channel: ChannelId,
+    accountId: string,
     target: OutboundTarget,
     content: OutboundContent,
   ): Promise<SendReceipt> {
-    const adapter = this.adapters.get(channel);
-    if (adapter === undefined) throw new Error(`channel ${channel} not registered`);
+    const adapter = this.adapter(channel, accountId);
+    if (adapter === undefined) {
+      throw new Error(`channel ${channel} account ${accountId} not registered`);
+    }
     return adapter.send(target, content);
+  }
+
+  private adapterKey(channel: ChannelId, accountId: string): string {
+    return `${channel}:${accountId}`;
+  }
+
+  private conversationKey(msg: InboundMessage): string {
+    return msg.conversation.threadId !== undefined
+      ? `${msg.conversation.jid}#${msg.conversation.threadId}`
+      : msg.conversation.jid;
   }
 }

@@ -20,7 +20,11 @@ jobs:
         run: npm run format:changed
       - name: Typecheck
         run: npm run typecheck
+      - name: Typecheck web
+        run: npm run typecheck:web
       - name: Test
         run: npm test
       - name: Build
         run: npm run build
+      - name: Build web
+        run: npm run build:web

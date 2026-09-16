@@ -42,9 +42,17 @@ describe('Owner Gate', () => {
       const v = checkOwnerGate(gate({ command: cmd }));
       expect(v.action).toBe('silent_drop');
     }
-    expect(checkOwnerGate(gate({ command: '/bind', senderId: 'im-42' })).action).toBe(
-      'execute',
-    );
+    expect(checkOwnerGate(gate({ command: '/bind', senderId: 'im-42' }))).toEqual({
+      action: 'silent_drop',
+      reason: 'owner-required command not implemented',
+    });
+  });
+
+  it('normalizes casing, arguments, and Telegram bot suffixes', () => {
+    for (const command of ['/BIND workspace', '/unbind@ClawtideBot', ' /bind@bot arg ']) {
+      expect(checkOwnerGate(gate({ command })).action).toBe('silent_drop');
+      expect(checkOwnerGate(gate({ command, senderId: 'im-42' })).action).toBe('silent_drop');
+    }
   });
 
   it('unbound owner_im_id never authenticates anyone', () => {

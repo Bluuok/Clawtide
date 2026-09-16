@@ -220,13 +220,17 @@ describe('mount resolution (table-driven, first occupancy persists)', () => {
       )
       .run();
     const sessions: string[] = [];
+    const sessionRows = new Map<string, { id: string; workspace_id: string }>();
     let n = 0;
     const allocator: SessionAllocator = {
       createSession: (workspaceId) => {
         const id = `sess-${workspaceId}-${++n}`;
         sessions.push(id);
-        return { id };
+        const session = { id, workspace_id: workspaceId };
+        sessionRows.set(id, session);
+        return session;
       },
+      sessionById: (sessionId) => sessionRows.get(sessionId),
     };
     const manager = new ImManager(db, silent, allocator);
     return { manager, db, config, sessions };

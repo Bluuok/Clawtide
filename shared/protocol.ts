@@ -4,6 +4,8 @@
  * here; defining a type twice in either side is a defect.
  */
 
+import { z } from 'zod';
+
 /** Standard WebSocket envelope. Every server→client push uses this shape. */
 export interface WsEnvelope<T = unknown> {
   type: string;
@@ -20,8 +22,19 @@ export interface WsHelloPayload {
 }
 
 /** Client→server WS frames are typed by `type` with JSON payloads. */
-export type WsClientFrame =
-  { type: 'pong' | 'ping' } | { type: 'chat'; sessionId: string; content: string };
+export const wsClientFrameSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('pong') }).strict(),
+  z.object({ type: z.literal('ping') }).strict(),
+  z
+    .object({
+      type: z.literal('chat'),
+      sessionId: z.string().min(1).max(200),
+      content: z.string().min(1).max(100_000),
+    })
+    .strict(),
+]);
+
+export type WsClientFrame = z.infer<typeof wsClientFrameSchema>;
 
 /** Payload of `GET /healthz` (no auth: liveness only, no secrets). */
 export interface HealthPayload {

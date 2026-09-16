@@ -11,7 +11,11 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { Logger } from 'pino';
 import type { AppConfig } from './config.js';
-import type { WsEnvelope, WsClientFrame, WsHelloPayload } from '../shared/protocol.js';
+import {
+  wsClientFrameSchema,
+  type WsEnvelope,
+  type WsHelloPayload,
+} from '../shared/protocol.js';
 import { appVersion } from './version.js';
 
 /** Result of authenticating an upgrade request. */
@@ -35,7 +39,10 @@ export interface WsHubOptions {
    * frames from an authenticated connection. Loop 2 wires this to the agent
    * runtime; streaming responses come back via broadcastToUser.
    */
-  onChat?: (userId: string, payload: { sessionId: string; content: string }) => void;
+  onChat?: (
+    userId: string,
+    payload: { sessionId: string; content: string },
+  ) => void | Promise<void>;
 }
 
 interface HubConnection {
@@ -58,7 +65,7 @@ export class WsHub {
     private readonly opts: WsHubOptions,
     private readonly log: Logger,
   ) {
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({ noServer: true, maxPayload: 512 * 1024 });
     this.wss.on(
       'connection',
       (socket: WebSocket, request: IncomingMessage, auth: WsAuthResult) =>
@@ -128,20 +135,30 @@ export class WsHub {
       conn.alive = true;
     });
     socket.on('message', (data) => {
-      let frame: WsClientFrame;
+      let raw: unknown;
       try {
-        frame = JSON.parse(String(data)) as WsClientFrame;
+        raw = JSON.parse(String(data));
       } catch {
         log.debug('ws frame not json; ignored');
         return;
       }
+      const parsed = wsClientFrameSchema.safeParse(raw);
+      if (!parsed.success) {
+        log.debug('invalid ws frame; ignored');
+        return;
+      }
+      const frame = parsed.data;
       if (frame.type === 'ping') {
         socket.send(
           JSON.stringify({ type: 'pong', payload: null, ts: new Date().toISOString() }),
         );
       } else if (frame.type === 'chat') {
         if (auth.userId !== undefined && this.opts.onChat !== undefined) {
-          this.opts.onChat(auth.userId, { sessionId: frame.sessionId, content: frame.content });
+          void this.dispatchChat(
+            auth.userId,
+            { sessionId: frame.sessionId, content: frame.content },
+            log,
+          );
         } else {
           log.debug({ type: frame.type }, 'chat frame dropped: no handler or no auth');
         }
@@ -154,6 +171,18 @@ export class WsHub {
     socket.on('error', (err) => {
       log.warn({ err }, 'ws error');
     });
+  }
+
+  private async dispatchChat(
+    userId: string,
+    payload: { sessionId: string; content: string },
+    log: Logger,
+  ): Promise<void> {
+    try {
+      await this.opts.onChat?.(userId, payload);
+    } catch (err) {
+      log.warn({ err, sessionId: payload.sessionId }, 'ws chat handler failed');
+    }
   }
 
   private sweep(): void {

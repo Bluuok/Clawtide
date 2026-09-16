@@ -209,7 +209,9 @@ export class AgentProfileStore {
 
   byIdFor(ownerUserId: string, profileId: string): AgentProfile | undefined {
     return this.db.db
-      .prepare('SELECT * FROM agent_profiles WHERE id = ? AND owner_user_id = ?')
+      .prepare(
+        "SELECT * FROM agent_profiles WHERE id = ? AND owner_user_id = ? AND status = 'active'",
+      )
       .get(profileId, ownerUserId) as AgentProfile | undefined;
   }
 

@@ -10,7 +10,7 @@ import type { AppConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { openDatabase, AppDb } from './db.js';
 import { createApp, type ServerDeps, type AppServices } from './web.js';
-import { WsHub, type WsAuthenticator } from './ws.js';
+import { WsHub, type WsAuthenticator, type WsHubOptions } from './ws.js';
 import { AuthService } from './auth.js';
 import { LoginRateLimiter } from './rate-limit.js';
 import { UserStore } from './stores/users.js';
@@ -46,6 +46,8 @@ export interface StartOptions {
   wsAuthenticator?: WsAuthenticator;
   /** Test seam: replace the SDK turn executor while assembling the runtime. */
   executeTurn?: TurnExecutor;
+  /** Test seam: replace the authenticated WS chat callback. */
+  wsOnChat?: WsHubOptions['onChat'];
   /** Test seam: replace the task-run executor (defaults to the runtime). */
   taskExecutor?: (
     run: Parameters<TaskScheduler['runClaimed']>[0],
@@ -142,44 +144,50 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
       config,
       logger,
       authenticator: opts.wsAuthenticator ?? wsSessionAuthenticator(authService),
-      onChat: (userId, { sessionId, content }) => {
-        const session = runtime.sessionById(sessionId);
-        if (session === undefined) {
-          logger.warn({ userId, sessionId }, 'chat frame for unknown session dropped');
-          return;
-        }
-        const wsRow = workspaceStore.byId(session.workspace_id);
-        if (wsRow === undefined) return;
-        const actor = userStore.byId(userId);
-        if (actor === undefined) return;
-        // Same ownership gate as the HTTP surface: a foreign workspace's
-        // session executes nothing (R20), and no reply leaks the refusal.
-        if (
-          canAccessGroup(
-            { id: actor.id, role: actor.role },
-            wsRow,
-            workspaceStore.resolveSiblingHome,
-          ) !== 'allow'
-        ) {
-          logger.debug({ userId, sessionId }, 'chat frame denied by RBAC');
-          return;
-        }
-        const profile = session.profile_id
-          ? profileStore.byId(session.profile_id)
-          : profileStore.defaultFor(actor.id);
-        const opts = {
-          systemPrompt: profile !== undefined ? buildSystemPrompt(profile) : undefined,
-        };
-        runtime.deps.baseUrl = providerBaseUrl();
-        void runtime.sendMessage(
-          session,
-          content,
-          (event) => {
-            wsHub.broadcastToUser(userId, toStreamEventEnvelope(event));
-          },
-          opts,
-        );
-      },
+      onChat:
+        opts.wsOnChat ??
+        (async (userId, { sessionId, content }) => {
+          const session = runtime.sessionById(sessionId);
+          if (session === undefined) {
+            logger.warn({ userId, sessionId }, 'chat frame for unknown session dropped');
+            return;
+          }
+          const wsRow = workspaceStore.byId(session.workspace_id);
+          if (wsRow === undefined) return;
+          const actor = userStore.byId(userId);
+          if (actor === undefined) return;
+          // Same ownership gate as the HTTP surface: a foreign workspace's
+          // session executes nothing (R20), and no reply leaks the refusal.
+          if (
+            canAccessGroup(
+              { id: actor.id, role: actor.role },
+              wsRow,
+              workspaceStore.resolveSiblingHome,
+            ) !== 'allow'
+          ) {
+            logger.debug({ userId, sessionId }, 'chat frame denied by RBAC');
+            return;
+          }
+          const profile = session.profile_id
+            ? profileStore.byIdFor(actor.id, session.profile_id)
+            : profileStore.defaultFor(actor.id);
+          if (session.profile_id !== null && profile === undefined) {
+            logger.debug({ userId, sessionId }, 'chat frame denied by profile ownership');
+            return;
+          }
+          const turnOpts = {
+            systemPrompt: profile !== undefined ? buildSystemPrompt(profile) : undefined,
+          };
+          runtime.deps.baseUrl = providerBaseUrl();
+          await runtime.sendMessage(
+            session,
+            content,
+            (event) => {
+              wsHub.broadcastToUser(userId, toStreamEventEnvelope(event));
+            },
+            turnOpts,
+          );
+        }),
     },
     logger.child({ component: 'ws' }),
   );
@@ -216,6 +224,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     logger,
     manager: imManager,
     runtime,
+    profileStore,
     workspaceStore,
     wsHub,
   });
@@ -254,7 +263,7 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
       logger.warn({ channel: row.channel, accountId: row.id }, 'no credentials; adapter idle');
       continue;
     }
-    imManager.register(adapter);
+    imManager.register(row.id, adapter);
     imAdapters.push(adapter);
   }
 
