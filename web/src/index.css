@@ -1,5 +1,53 @@
 @import 'tailwindcss';
 
+.task-result {
+  min-width: 0;
+  max-width: 36rem;
+}
+.task-result-preview,
+.task-result-full {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-result-preview {
+  max-height: 6rem;
+  overflow: hidden;
+}
+.task-result-full {
+  max-height: 32rem;
+  overflow: auto;
+}
+.task-run-table {
+  table-layout: fixed;
+}
+.task-run-table th:last-child {
+  width: 45%;
+}
+@media (max-width: 640px) {
+  .task-run-table,
+  .task-run-table tbody,
+  .task-run-table tr,
+  .task-run-table td {
+    display: block;
+    width: 100%;
+  }
+  .task-run-table thead {
+    display: none;
+  }
+  .task-run-table tr {
+    padding: 0.75rem 0;
+  }
+  .task-run-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  .task-result {
+    max-width: 100%;
+  }
+}
+
 /* Adapted from the OpenDesign Local Codex Clawtide Tide Studio prototype. */
 @theme {
   --color-slate-50: #f6f5ef;

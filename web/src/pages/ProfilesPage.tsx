@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type Profile, type ProfileVersion } from '../api.js';
 import { ArtImage, EmptyState } from '../components/Design.js';
 import { useMobileSidebar } from '../hooks/useMobileSidebar.js';
+import { useSession } from '../stores/session.js';
+import { useMemoryDrafts } from '../stores/memoryDrafts.js';
 
 const SEGMENTS = [
   {
@@ -159,6 +161,11 @@ export function ProfilesPage() {
           profile={active}
           onEditing={setEditing}
           onSaved={(p) => setProfiles((prev) => prev.map((x) => (x.id === p.id ? p : x)))}
+          onDefaultChanged={(updated) =>
+            setProfiles((prev) =>
+              prev.map((x) => (x.id === updated.id ? updated : { ...x, isDefault: false })),
+            )
+          }
           onReload={reload}
         />
       ) : loading ? (
@@ -245,32 +252,121 @@ function ProfileEditor(props: {
   onSaved: (p: Profile) => void;
   onReload: () => Promise<void>;
   onEditing: (editing: boolean) => void;
+  onDefaultChanged: (updated: Profile) => void;
 }) {
   const p = props.profile;
-  const [name, setName] = useState(p.name);
-  const [mode, setMode] = useState<'append' | 'replace'>(p.promptMode);
-  const [segs, setSegs] = useState<Record<SegmentKey, string>>({
-    identity: p.identity,
-    soul: p.soul,
-    agents: p.agents,
-    tools: p.tools,
+
+  // Stable store action selectors (never whole-store objects in deps).
+  const userId = useSession((s) => s.user?.id);
+  const getProfileDraft = useMemoryDrafts((s) => s.getProfileDraft);
+  const setProfileDraft = useMemoryDrafts((s) => s.setProfileDraft);
+  const clearProfileDraft = useMemoryDrafts((s) => s.clearProfileDraft);
+  const getAuthEpoch = useCallback(() => useMemoryDrafts.getState().authEpoch, []);
+  const epochAtMount = useRef(getAuthEpoch());
+  const baseline = useRef(p);
+
+  // Initialise from memory draft if one exists for this profile/user.
+  const [name, setName] = useState(() => {
+    const mem = getProfileDraft(userId, p.id);
+    return (mem ?? null) ? mem!.name : p.name;
   });
+  const [mode, setMode] = useState<'append' | 'replace'>(() => {
+    const mem = getProfileDraft(userId, p.id);
+    return (mem ?? null) ? mem!.promptMode : p.promptMode;
+  });
+  const [segs, setSegs] = useState<Record<SegmentKey, string>>(() => {
+    const mem = getProfileDraft(userId, p.id);
+    if (mem) {
+      return {
+        identity: mem.segs.identity ?? p.identity,
+        soul: mem.segs.soul ?? p.soul,
+        agents: mem.segs.agents ?? p.agents,
+        tools: mem.segs.tools ?? p.tools,
+      };
+    }
+    return { identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools };
+  });
+  const [baseVersion, setBaseVersion] = useState(() => {
+    const mem = getProfileDraft(userId, p.id);
+    return mem?.baseVersion ?? p.version;
+  });
+
+  // Warn when incoming profile version is newer than what the draft is based on.
+  const [staleWarning, setStaleWarning] = useState<string | null>(null);
+
   const dirty =
-    name !== p.name || mode !== p.promptMode || SEGMENTS.some((s) => segs[s.key] !== p[s.key]);
+    name !== baseline.current.name ||
+    mode !== baseline.current.promptMode ||
+    SEGMENTS.some((s) => segs[s.key] !== baseline.current[s.key]);
   const [section, setSection] = useState<SegmentKey>('identity');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [defaultBusy, setDefaultBusy] = useState(false);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
 
+  // When server-side profile metadata changes (e.g. after setDefault or restore),
+  // update name/mode/segs only when there is no unsaved draft; otherwise warn.
   useEffect(() => {
-    setName(p.name);
-    setMode(p.promptMode);
-    setSegs({ identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools });
-    setError(null);
-  }, [p.id, p.updatedAt, p.name, p.promptMode, p.identity, p.soul, p.agents, p.tools]);
+    // Detect a new incoming version that differs from what the draft is based on.
+    if (p.version !== baseVersion) {
+      if (dirty) {
+        // Draft is based on a stale version — warn but do NOT replace text.
+        setStaleWarning(
+          `The profile was updated to v${p.version} externally. ` +
+            `Your draft is still based on v${baseVersion}. ` +
+            `Discard your draft to load the latest version.`,
+        );
+        return;
+      }
+      // No unsaved edits — safe to absorb the new server state.
+      baseline.current = p;
+      setName(p.name);
+      setMode(p.promptMode);
+      setSegs({ identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools });
+      setBaseVersion(p.version);
+      setStaleWarning(null);
+      setError(null);
+    } else {
+      // Same version — absorb metadata-only changes (name/promptMode) unless dirty.
+      if (!dirty) {
+        setName(p.name);
+        setMode(p.promptMode);
+        setSegs({ identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools });
+        setStaleWarning(null);
+        setError(null);
+      }
+    }
+    // p.id guards remounting; only react to server-pushed field changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    p.id,
+    p.updatedAt,
+    p.name,
+    p.promptMode,
+    p.identity,
+    p.soul,
+    p.agents,
+    p.tools,
+    p.version,
+  ]);
+
+  // Also persist while the component is mounted on every change (survives same-session nav).
+  useEffect(() => {
+    if (getAuthEpoch() !== epochAtMount.current || useSession.getState().user?.id !== userId)
+      return;
+    if (dirty) {
+      setProfileDraft(userId, p.id, { name, promptMode: mode, segs, baseVersion });
+    } else {
+      clearProfileDraft(userId, p.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, mode, segs, baseVersion, dirty]);
+
   useEffect(() => {
     props.onEditing(dirty || busy);
   }, [dirty, busy, props.onEditing]);
+
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -280,12 +376,17 @@ function ProfileEditor(props: {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
+
   const discard = () => {
+    baseline.current = p;
     setName(p.name);
     setMode(p.promptMode);
     setSegs({ identity: p.identity, soul: p.soul, agents: p.agents, tools: p.tools });
+    setBaseVersion(p.version);
     setError(null);
     setSaved(false);
+    setStaleWarning(null);
+    clearProfileDraft(userId, p.id);
   };
 
   const save = async () => {
@@ -293,18 +394,53 @@ function ProfileEditor(props: {
     setSaved(false);
     setBusy(true);
     setError(null);
+    const epochAtCall = getAuthEpoch();
     try {
       const { profile } = await api.patch<{ profile: Profile }>(`/profiles/${p.id}`, {
         name,
         segments: segs,
         promptMode: mode,
       });
+      if (getAuthEpoch() !== epochAtCall) return;
+      baseline.current = profile;
+      setName(profile.name);
+      setMode(profile.promptMode);
+      setSegs({
+        identity: profile.identity,
+        soul: profile.soul,
+        agents: profile.agents,
+        tools: profile.tools,
+      });
       props.onSaved(profile);
+      setBaseVersion(profile.version);
+      clearProfileDraft(userId, p.id);
       setSaved(true);
+      setStaleWarning(null);
     } catch (err) {
+      if (getAuthEpoch() !== epochAtCall) return;
       setError(err instanceof ApiError ? err.message : 'save failed');
     } finally {
-      setBusy(false);
+      if (getAuthEpoch() === epochAtCall) setBusy(false);
+    }
+  };
+
+  const setAsDefault = async () => {
+    if (defaultBusy || p.isDefault) return;
+    setDefaultBusy(true);
+    setDefaultError(null);
+    const epochAtCall = getAuthEpoch();
+    try {
+      const { profile: updated } = await api.post<{ profile: Profile }>(
+        `/profiles/${p.id}/default`,
+      );
+      if (getAuthEpoch() !== epochAtCall) return;
+      // Update all badges: mark this profile default, clear others.
+      props.onDefaultChanged(updated);
+    } catch (err) {
+      if (getAuthEpoch() !== epochAtCall) return;
+      setDefaultError(err instanceof ApiError ? err.message : 'Could not set default profile.');
+    } finally {
+      if (getAuthEpoch() === epochAtCall) setDefaultBusy(false);
     }
   };
 
@@ -366,7 +502,33 @@ function ProfileEditor(props: {
             ? 'Append adds these instructions to the base profile.'
             : 'Replace replaces the editable base instructions. Platform rules still apply.'}
         </p>
+        {staleWarning !== null && (
+          <p role="alert" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {staleWarning}
+          </p>
+        )}
         {error !== null && <p className="text-sm text-red-600">{error}</p>}
+        {/* Set as default */}
+        <div className="flex items-center gap-3">
+          {p.isDefault ? (
+            <span className="text-sm text-emerald-700 font-medium">
+              ✓ This is the default profile
+            </span>
+          ) : (
+            <>
+              <button
+                onClick={() => void setAsDefault()}
+                disabled={defaultBusy}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
+              >
+                {defaultBusy ? 'Setting…' : 'Set as default'}
+              </button>
+              {defaultError !== null && (
+                <span className="text-sm text-red-600">{defaultError}</span>
+              )}
+            </>
+          )}
+        </div>
         <div className="profile-sections" aria-label="Profile sections">
           {SEGMENTS.map((s) => (
             <button
@@ -514,16 +676,56 @@ function VersionHistory(props: {
  * phrase aborts the draft — the user starts over.
  */
 function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
-  const [draftJson, setDraftJson] = useState('');
-  const [phrase, setPhrase] = useState<string | null>(null);
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState('');
+  const userId = useSession((s) => s.user?.id);
+  const getDraftFlow = useMemoryDrafts((s) => s.getDraftFlow);
+  const setDraftFlow = useMemoryDrafts((s) => s.setDraftFlow);
+  const clearDraftFlow = useMemoryDrafts((s) => s.clearDraftFlow);
+  const getAuthEpoch = useCallback(() => useMemoryDrafts.getState().authEpoch, []);
+  const epochAtMount = useRef(getAuthEpoch());
+
+  const profileId = props.profile.id;
+
+  // Restore persisted state from memory (survives route navigation).
+  const [draftJson, setDraftJson] = useState(
+    () => getDraftFlow(userId, profileId)?.draftJson ?? '',
+  );
+  const [phrase, setPhrase] = useState<string | null>(
+    () => getDraftFlow(userId, profileId)?.phrase ?? null,
+  );
+  const [draftId, setDraftId] = useState<string | null>(
+    () => getDraftFlow(userId, profileId)?.draftId ?? null,
+  );
+  const [confirm, setConfirm] = useState(() => getDraftFlow(userId, profileId)?.confirm ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Persist to memory on every relevant change.
+  useEffect(() => {
+    if (getAuthEpoch() !== epochAtMount.current || useSession.getState().user?.id !== userId)
+      return;
+    setDraftFlow(userId, profileId, { draftId, phrase, confirm, draftJson });
+  }, [draftId, phrase, confirm, draftJson, setDraftFlow, userId, profileId]);
+
+  // Warn before unload when a pending draft or unsubmitted draftJson exists.
+  const hasPending = draftId !== null || draftJson.trim().length > 0;
+  useEffect(() => {
+    if (!hasPending) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasPending]);
+
+  // Clear memory on unmount only if no pending draft (i.e. after successful publish).
+  // We persist intentionally on ordinary unmount so state survives navigation.
+
   const createDraft = async () => {
+    if (busy) return;
     setBusy(true);
     setError(null);
+    const epochAtCall = getAuthEpoch();
     try {
       // Prefill from the current profile so the flow is one click.
       const body =
@@ -544,38 +746,61 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
       const res = await api.post<{ draftId: string; confirmationPhrase: string }>('/drafts', {
         draftJson: body,
       });
+      if (getAuthEpoch() !== epochAtCall) return;
       setDraftJson(body);
       setDraftId(res.draftId);
       setPhrase(res.confirmationPhrase);
       setConfirm('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'draft failed');
+      if (getAuthEpoch() !== epochAtCall) return;
+      // TypeError (network failure) surfaces the same as ApiError — do not silently swallow.
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'draft failed',
+      );
     } finally {
-      setBusy(false);
+      if (getAuthEpoch() === epochAtCall) setBusy(false);
     }
   };
 
   const confirmPublish = async () => {
-    if (draftId === null) return;
+    if (draftId === null || busy) return;
     setBusy(true);
     setError(null);
+    const epochAtCall = getAuthEpoch();
     try {
       await api.post(`/drafts/${draftId}/confirm`, { phrase: confirm });
+      if (getAuthEpoch() !== epochAtCall) return;
       setDraftId(null);
       setPhrase(null);
       setConfirm('');
+      setDraftJson('');
+      clearDraftFlow(userId, profileId);
       props.onPublished();
     } catch (err) {
+      if (getAuthEpoch() !== epochAtCall) return;
       if (err instanceof ApiError) {
         setError(err.message);
-        // A mismatched phrase aborts the draft — restart the flow.
+        // A mismatched phrase (400) aborts the draft — restart the flow.
+        // All other API errors retain the unconfirmed draftId/phrase/confirm.
         if (err.status === 400) {
           setDraftId(null);
           setPhrase(null);
+          setConfirm('');
+          // draftJson is preserved so the user can recreate without retyping.
         }
+        // For non-400 ApiErrors we intentionally do NOT reset draftId/phrase/confirm.
+      } else {
+        // Network TypeError or other unexpected error — show message, retain all state.
+        setError(
+          'Publish status unconfirmed. Your draft and confirmation are retained. Check the profile before trying again.',
+        );
       }
     } finally {
-      setBusy(false);
+      if (getAuthEpoch() === epochAtCall) setBusy(false);
     }
   };
 
@@ -600,7 +825,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
             disabled={busy}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
           >
-            Stage 1: Create draft
+            {busy ? 'Creating…' : 'Stage 1: Create draft'}
           </button>
         </div>
       ) : (
@@ -623,7 +848,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
             disabled={busy || confirm.length === 0}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            Stage 2: Publish
+            {busy ? 'Publishing…' : 'Stage 2: Publish'}
           </button>
         </div>
       )}

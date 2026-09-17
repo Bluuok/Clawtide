@@ -7,8 +7,11 @@
  * store keeps the entire transcript for copy/reference.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type Session, type Workspace } from '../api.js';
-import { useChat, type ChatEntry } from '../stores/chat.js';
+import { api, ApiError, type Session, type Workspace, type Profile } from '../api.js';
+import { useChat, type ChatEntry, MAX_CHAT_CONTENT_LENGTH } from '../stores/chat.js';
+import { useSession } from '../stores/session.js';
+import { useMemoryDrafts } from '../stores/memoryDrafts.js';
+import { MarkdownView } from '../components/MarkdownView.js';
 import { EmptyState } from '../components/Design.js';
 import { useMobileSidebar } from '../hooks/useMobileSidebar.js';
 
@@ -16,60 +19,125 @@ import { useMobileSidebar } from '../hooks/useMobileSidebar.js';
 const WINDOW_STEP = 50;
 
 export function ChatPage() {
+  const user = useSession((s) => s.user);
+  const userId = user?.id;
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const sidebar = useMobileSidebar();
   const createSessionRef = useRef<HTMLSelectElement>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const activeSession = sessions.find((s) => s.id === activeId);
   const activeWorkspace = workspaces.find((w) => w.id === activeSession?.workspaceId);
+  const boundProfile = profiles.find((p) => p.id === activeSession?.profileId);
+
+  // Subscribe specifically to the active session draft string to re-render without triggering list reloads
+  const currentDraft = useMemoryDrafts((s) =>
+    activeId ? (s.chatDrafts[userId || 'anon']?.[activeId] ?? '') : '',
+  );
+
   const setDraft = (value: string) => {
-    if (activeId !== null) setDrafts((prev) => ({ ...prev, [activeId]: value }));
+    if (activeId !== null && mountedRef.current && useSession.getState().user?.id === userId) {
+      useMemoryDrafts.getState().setChatDraft(userId, activeId, value);
+    }
   };
 
   const loadLists = useCallback(async () => {
+    const startEpoch = useMemoryDrafts.getState().authEpoch;
     setLoading(true);
     setError(null);
     try {
-      const [{ sessions: ss }, { workspaces: ws }] = await Promise.all([
+      const [{ sessions: ss }, { workspaces: ws }, profsRes] = await Promise.all([
         api.get<{ sessions: Session[] }>('/chat/sessions'),
         api.get<{ workspaces: Workspace[] }>('/workspaces'),
+        api.get<{ profiles: Profile[] }>('/profiles').catch(() => ({ profiles: [] })),
       ]);
+
+      if (!mountedRef.current || startEpoch !== useMemoryDrafts.getState().authEpoch) return;
+
       setSessions(ss);
       setWorkspaces(ws);
-      setActiveId((prev) => prev ?? ss[0]?.id ?? null);
+      setProfiles(profsRes.profiles);
+
+      const saved = useMemoryDrafts.getState().getSelectedSession(userId);
+      if (saved && ss.some((s) => s.id === saved)) {
+        setActiveId(saved);
+      } else {
+        const nextId = ss[0]?.id ?? null;
+        setActiveId(nextId);
+        if (nextId) useMemoryDrafts.getState().setSelectedSession(userId, nextId);
+      }
     } catch {
-      setError('Could not load your conversations.');
+      if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
+        setError('Could not load your conversations.');
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void loadLists();
   }, [loadLists]);
 
-  const createSession = async (workspaceId: string) => {
+  const selectSession = (id: string) => {
+    setActiveId(id);
+    useMemoryDrafts.getState().setSelectedSession(userId, id);
+    sidebar.close();
+  };
+
+  const createSession = async (workspaceId: string, profileId?: string) => {
     if (creating) return;
+    const startEpoch = useMemoryDrafts.getState().authEpoch;
     setCreating(true);
     setError(null);
     try {
       const { session } = await api.post<{ session: Session }>('/chat/sessions', {
         workspaceId,
+        ...(profileId ? { profileId } : {}),
       });
+
+      if (!mountedRef.current || startEpoch !== useMemoryDrafts.getState().authEpoch) return;
+
       setSessions((prev) => [...prev, session]);
       setActiveId(session.id);
+      useMemoryDrafts.getState().setSelectedSession(userId, session.id);
       sidebar.close();
     } catch {
-      setError('Could not create a conversation. Please try again.');
+      if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
+        setError('Could not create a conversation. Please try again.');
+      }
     } finally {
-      setCreating(false);
+      if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
+        setCreating(false);
+      }
     }
   };
+
+  const sessionBusy = useChat((s) => Boolean(activeId && s.sessionBusy[activeId]));
+
+  const workerDisplay = activeSession
+    ? activeSession.profileId
+      ? boundProfile
+        ? `Worker: ${boundProfile.name}`
+        : `Worker: Unavailable worker (${activeSession.profileId.slice(0, 8)})`
+      : 'Worker: Default worker (auto-resolved)'
+    : null;
 
   return (
     <div className={`split-page chat-page ${sidebar.open ? 'sessions-open' : ''}`}>
@@ -99,12 +167,10 @@ export function ChatPage() {
         createRef={createSessionRef}
         sessions={sessions}
         workspaces={workspaces}
+        profiles={profiles}
         activeId={activeId}
-        onSelect={(id) => {
-          setActiveId(id);
-          sidebar.close();
-        }}
-        onCreate={(id) => void createSession(id)}
+        onSelect={selectSession}
+        onCreate={(wsId, profId) => void createSession(wsId, profId)}
         loading={loading}
         creating={creating}
       />
@@ -118,7 +184,25 @@ export function ChatPage() {
           </p>
         )}
         <header className="chat-heading">
-          <h2>{activeWorkspace?.displayName ?? 'Your next conversation'}</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2>{activeWorkspace?.displayName ?? 'Your next conversation'}</h2>
+              {workerDisplay && (
+                <span className="block mt-0.5 text-xs font-medium text-slate-500">
+                  {workerDisplay}
+                </span>
+              )}
+            </div>
+            {sessionBusy && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-800"
+                role="status"
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                Working on a turn…
+              </span>
+            )}
+          </div>
           <p>
             {activeId
               ? `Conversation ${activeId.slice(0, 8)} · A space for your next good idea.`
@@ -151,11 +235,11 @@ export function ChatPage() {
         {activeId !== null && (
           <Composer
             key={`composer-${activeId}`}
-            disabled={false}
+            disabled={sessionBusy}
             onSend={async (text) => {
               await useChat.getState().sendChat(activeId, text);
             }}
-            draft={drafts[activeId] ?? ''}
+            draft={currentDraft}
             setDraft={setDraft}
           />
         )}
@@ -170,19 +254,23 @@ function SessionSidebar(props: {
   createRef: React.RefObject<HTMLSelectElement | null>;
   sessions: Session[];
   workspaces: Workspace[];
+  profiles: Profile[];
   activeId: string | null;
   onSelect: (id: string) => void;
-  onCreate: (workspaceId: string) => void;
+  onCreate: (workspaceId: string, profileId?: string) => void;
   loading: boolean;
   creating: boolean;
 }) {
   const [query, setQuery] = useState('');
+  const [newProfileId, setNewProfileId] = useState('');
+
   const filtered = [...props.sessions]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .filter((s) => {
       const name = props.workspaces.find((w) => w.id === s.workspaceId)?.displayName ?? '';
       return `${name} ${s.id}`.toLowerCase().includes(query.trim().toLowerCase());
     });
+
   return (
     <div
       ref={props.panelRef}
@@ -242,6 +330,22 @@ function SessionSidebar(props: {
             ? 'Create a workspace first to begin.'
             : 'Start something new'}
         </p>
+        {props.profiles.length > 0 && (
+          <select
+            aria-label="Worker profile for new conversation"
+            value={newProfileId}
+            disabled={props.creating || props.loading}
+            className="mb-1.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+            onChange={(e) => setNewProfileId(e.target.value)}
+          >
+            <option value="">Worker: Default worker (auto)</option>
+            {props.profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                Worker: {p.name} {p.isDefault ? '(default)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           ref={props.createRef}
           disabled={props.creating || props.loading || props.workspaces.length === 0}
@@ -250,7 +354,7 @@ function SessionSidebar(props: {
           defaultValue=""
           onChange={(e) => {
             if (e.target.value !== '') {
-              props.onCreate(e.target.value);
+              props.onCreate(e.target.value, newProfileId || undefined);
               e.target.value = '';
             }
           }}
@@ -282,6 +386,7 @@ function Transcript({
   const [showLatest, setShowLatest] = useState(false);
   const entries = useChat((s) => s.entries[sessionId]);
   const loadTranscript = useChat((s) => s.loadTranscript);
+  const syncError = useChat((s) => s.syncError[sessionId]);
   const [windowSize, setWindowSize] = useState(WINDOW_STEP);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -308,8 +413,6 @@ function Transcript({
   const visible = useMemo(() => all.slice(-windowSize), [all, windowSize]);
   const hiddenCount = all.length - visible.length;
 
-  // Keep pinned to bottom while the user hasn't scrolled up; new stream
-  // fragments arrive frequently, so this must not fight the user's scroll.
   useEffect(() => {
     const el = scrollRef.current;
     if (el !== null && pinnedRef.current && visible.length > 0) {
@@ -322,7 +425,6 @@ function Transcript({
     if (el === null) return;
     pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     setShowLatest(all.length > 0 && !pinnedRef.current);
-    // Scrolled to the top with history hidden → reveal more.
     if (el.scrollTop <= 0 && hiddenCount > 0) {
       setWindowSize((w) => w + WINDOW_STEP);
     }
@@ -340,6 +442,14 @@ function Transcript({
             Could not load messages.{' '}
             <button className="underline" onClick={() => setRetry((n) => n + 1)}>
               Retry
+            </button>
+          </p>
+        )}
+        {syncError && !error && (
+          <p role="status" className="mb-2 text-xs text-amber-700">
+            {syncError}{' '}
+            <button className="underline" onClick={() => void loadTranscript(sessionId)}>
+              Sync now
             </button>
           </p>
         )}
@@ -406,34 +516,65 @@ function MessageBubble({ entry }: { entry: ChatEntry }) {
       setCopyState('Copy unavailable');
     }
   };
-  const isTool = !isUser && entry.content.startsWith('tool:');
-  if (isTool)
+
+  const isTool = entry.kind === 'tool';
+  const isError = entry.kind === 'error';
+
+  if (isTool) {
+    const statusText =
+      entry.toolStatus === 'started'
+        ? '…'
+        : entry.toolStatus === 'failed' || entry.isError
+          ? 'failed'
+          : 'done';
+    const label = entry.toolName
+      ? `${entry.toolName} ${statusText}`
+      : entry.content.replace(/^tool:\s*/, '');
     return (
       <details className="tool-activity">
         <summary>
-          Tool activity <span>{entry.content.slice(6)}</span>
+          Tool activity <span>{label}</span>
         </summary>
         <p>{entry.content}</p>
       </details>
     );
+  }
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`message-content max-w-[90%] whitespace-pre-wrap ${
           isUser
             ? 'message-user'
-            : entry.content.startsWith('⚠')
+            : isError
               ? 'message-error border border-red-200 bg-red-50 text-red-800'
-              : entry.content.startsWith('tool:')
-                ? 'border border-slate-200 bg-slate-100 font-mono text-xs text-slate-600'
-                : 'message-assistant'
+              : 'message-assistant'
         }`}
       >
         <div className="message-meta">
           {isUser ? 'You' : 'Clawtide'} ·{' '}
           {new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {entry.status === 'failed' && (
+            <span className="ml-2 font-medium text-red-600" role="status">
+              · Failed to send
+            </span>
+          )}
+          {entry.status === 'unconfirmed' && (
+            <span className="ml-2 font-medium text-amber-600" role="status">
+              · Unconfirmed
+            </span>
+          )}
         </div>
-        {entry.content}
+        {entry.interrupted ? (
+          <details>
+            <summary>Interrupted output — may be incomplete</summary>
+            <MarkdownView content={entry.content} />
+          </details>
+        ) : isUser || isError ? (
+          entry.content
+        ) : (
+          <MarkdownView content={entry.content} />
+        )}
         {entry.streaming && (
           <span className="streaming-indicator" role="status">
             Writing
@@ -467,20 +608,29 @@ function Composer(props: {
 }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isOverlength = props.draft.length > MAX_CHAT_CONTENT_LENGTH;
+
   const submit = async () => {
     const text = props.draft.trim();
-    if (text.length === 0 || sending || props.disabled) return;
+    if (text.length === 0 || sending || props.disabled || isOverlength) return;
     setSending(true);
     setError(null);
     try {
       await props.onSend(text);
       props.setDraft('');
-    } catch {
-      setError('Message was not sent. Your draft is still here — please try again.');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError(
+          'Send status unconfirmed (network error). Your draft is retained — please check your connection or retry.',
+        );
+      }
     } finally {
       setSending(false);
     }
   };
+
   return (
     <div className="chat-composer">
       <div className="mx-auto max-w-3xl">
@@ -489,11 +639,21 @@ function Composer(props: {
             {error}
           </p>
         )}
+        {isOverlength && (
+          <p role="alert" className="mb-2 text-xs font-medium text-red-600">
+            Message length ({props.draft.length.toLocaleString()} characters) exceeds the limit
+            of {MAX_CHAT_CONTENT_LENGTH.toLocaleString()} characters. Please shorten it before
+            sending.
+          </p>
+        )}
         <textarea
           aria-label="Message"
           disabled={sending}
           value={props.draft}
-          onChange={(e) => props.setDraft(e.target.value)}
+          onChange={(e) => {
+            props.setDraft(e.target.value);
+            if (error) setError(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -501,17 +661,27 @@ function Composer(props: {
             }
           }}
           rows={2}
-          placeholder="A question, an idea, a next step…"
+          placeholder={
+            props.disabled
+              ? 'Digital worker is responding…'
+              : 'A question, an idea, a next step…'
+          }
           className="min-w-0 flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
         />
         <div className="composer-footer">
-          <small>Enter to send · Shift + Enter for a new line</small>
+          <small>
+            {props.disabled
+              ? 'Turn in progress…'
+              : 'Enter to send · Shift + Enter for a new line'}
+          </small>
           <button
             onClick={() => void submit()}
-            disabled={props.disabled || sending || props.draft.trim().length === 0}
+            disabled={
+              props.disabled || sending || props.draft.trim().length === 0 || isOverlength
+            }
             className="self-end rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {sending ? 'Sending…' : 'Send ↗'}
+            {sending ? 'Sending…' : props.disabled ? 'Busy…' : 'Send ↗'}
           </button>
         </div>
       </div>

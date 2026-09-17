@@ -5,6 +5,8 @@
  */
 import { create } from 'zustand';
 import { api, ApiError, type PublicUser } from '../api.js';
+import { useChat } from './chat.js';
+import { useMemoryDrafts } from './memoryDrafts.js';
 
 interface SessionState {
   /** undefined = bootstrap not finished; null = not logged in; set = logged in. */
@@ -15,7 +17,7 @@ interface SessionState {
   setUser: (user: PublicUser | null) => void;
 }
 
-export const useSession = create<SessionState>((set) => ({
+export const useSession = create<SessionState>((set, get) => ({
   user: undefined,
   checked: false,
   bootstrapError: null,
@@ -23,10 +25,10 @@ export const useSession = create<SessionState>((set) => ({
     set({ checked: false, bootstrapError: null });
     try {
       const { user } = await api.get<{ user: PublicUser }>('/auth/me');
-      set({ user, checked: true, bootstrapError: null });
+      get().setUser(user);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        set({ user: null, checked: true, bootstrapError: null });
+        get().setUser(null);
         return;
       }
       set({
@@ -36,5 +38,11 @@ export const useSession = create<SessionState>((set) => ({
       });
     }
   },
-  setUser: (user) => set({ user, checked: true, bootstrapError: null }),
+  setUser: (user) => {
+    if (get().user?.id !== user?.id) {
+      useChat.getState().clearUserScope();
+      useMemoryDrafts.getState().clearAll();
+    }
+    set({ user, checked: true, bootstrapError: null });
+  },
 }));

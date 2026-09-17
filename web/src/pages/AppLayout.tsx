@@ -33,7 +33,7 @@ export function AppLayout() {
   useEffect(() => {
     connect();
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [connect, disconnect, user?.id]);
 
   const logout = async () => {
     if (logoutBusy) return;
@@ -41,7 +41,6 @@ export function AppLayout() {
     setLogoutError(null);
     try {
       await api.post('/auth/logout');
-      disconnect();
       setUser(null);
       navigate('/login');
     } catch {
@@ -54,7 +53,6 @@ export function AppLayout() {
         signedOut = err instanceof ApiError && err.status === 401;
       }
       if (signedOut) {
-        disconnect();
         setUser(null);
         navigate('/login');
       } else {
@@ -117,7 +115,7 @@ export function AppLayout() {
           </div>
         )}
         <div className="page-outlet">
-          <Outlet />
+          <Outlet key={user?.id} />
         </div>
       </main>
     </div>

@@ -2,10 +2,23 @@
  * Tasks: per-workspace list, create (cron/interval/once × group/isolated),
  * pause/resume/delete, run-now (202 + runId, idempotent), and the runs
  * history of the selected task.
+ *
+ * PR3 – TaskDetail smart polling:
+ *   • Run Now → GET /tasks/:id immediately, then controlled setTimeout loop
+ *     that continues while any run is queued/retry_wait/running.
+ *   • Coalesced manual + visibility-focus requests: a pending request absorbs
+ *     duplicates; only one in-flight at a time.
+ *   • Failures use bounded exponential back-off (cap 30 s).
+ *   • Abort + ignore stale results on unmount or task switch (key={id}).
+ *   • Missing runId after Run Now: up to MAX_MISSING_POLLS follow-up polls.
+ *   • Last good runs preserved; stale-banner + last-update time shown.
+ *   • Run cards (responsive) replace the five-column table.
+ *   • result/error: capped 300-char preview, expand/collapse, Copy full.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type Task, type TaskRun, type Workspace } from '../api.js';
 import { ConfirmAction, EmptyState } from '../components/Design.js';
+import { followTaskRuns } from '../stores/taskRuns.js';
 
 export function TasksPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -17,7 +30,9 @@ export function TasksPage() {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [tasksLastUpdated, setTasksLastUpdated] = useState<Date | null>(null);
   const requestId = useRef(0);
+  const reloadAbortRef = useRef<AbortController | null>(null);
   const visibleTasks = tasks.filter(
     (t) =>
       (filter === 'all' || t.status === filter) &&
@@ -41,27 +56,40 @@ export function TasksPage() {
       return;
     }
     const request = ++requestId.current;
+    if (reloadAbortRef.current) {
+      reloadAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    reloadAbortRef.current = controller;
+
     setLoading(true);
     setError(null);
     try {
       const { tasks: list } = await api.get<{ tasks: Task[] }>(
         `/tasks?workspaceId=${encodeURIComponent(workspaceId)}`,
+        { signal: controller.signal },
       );
-      if (request !== requestId.current) return;
+      if (controller.signal.aborted || request !== requestId.current) return;
       setTasks(list);
+      setTasksLastUpdated(new Date());
       setSelected((prev) =>
         prev === null ? null : (list.find((t) => t.id === prev.id) ?? null),
       );
     } catch (err) {
-      if (request === requestId.current)
-        setError(err instanceof ApiError ? err.message : 'Could not load tasks.');
+      if (controller.signal.aborted || request !== requestId.current) return;
+      setError(err instanceof ApiError ? err.message : 'Could not load tasks.');
     } finally {
-      if (request === requestId.current) setLoading(false);
+      if (!controller.signal.aborted && request === requestId.current) {
+        setLoading(false);
+      }
     }
   }, [workspaceId]);
 
   useEffect(() => {
     void reload();
+    return () => {
+      reloadAbortRef.current?.abort();
+    };
   }, [reload]);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -82,14 +110,23 @@ export function TasksPage() {
     <div className="split-page tasks-page">
       <div className="list-panel tasks-sidebar">
         <div className="task-filters">
-          <span className="eyebrow">Scheduled work</span>
+          <div className="flex items-center justify-between">
+            <span className="eyebrow">Scheduled work</span>
+            {tasksLastUpdated && (
+              <span className="text-[10px] text-slate-400">
+                Updated {tasksLastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
           <select
             value={workspaceId}
             aria-label="Task workspace"
             disabled={busy}
             onChange={(e) => {
               requestId.current++;
+              reloadAbortRef.current?.abort();
               setTasks([]);
+              setTasksLastUpdated(null);
               setSelected(null);
               setWorkspaceId(e.target.value);
             }}
@@ -166,12 +203,22 @@ export function TasksPage() {
       </div>
       <div className="detail-panel">
         {error !== null && (
-          <p role="alert" className="mb-3 text-sm text-red-600">
-            {error}{' '}
-            <button className="underline" onClick={() => void reload()}>
-              Retry
-            </button>
-          </p>
+          <div role="alert" className="mb-3 rounded-md bg-red-50 p-2 text-sm text-red-700">
+            <div className="flex items-center justify-between">
+              <span>{error}</span>
+              <button
+                className="font-medium underline hover:text-red-900"
+                onClick={() => void reload()}
+              >
+                Retry
+              </button>
+            </div>
+            {tasksLastUpdated && (
+              <p className="mt-1 text-xs text-red-600/80">
+                Showing tasks cached from {tasksLastUpdated.toLocaleTimeString()}.
+              </p>
+            )}
+          </div>
         )}
         {selected !== null ? (
           <TaskDetail
@@ -406,23 +453,44 @@ function TaskDetail(props: {
   const t = props.task;
   const [runs, setRuns] = useState<TaskRun[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [runsError, setRunsError] = useState(false);
-
-  const loadRuns = useCallback(async () => {
-    setRunsError(false);
-    try {
-      const { runs: r } = await api.get<{ runs: TaskRun[] }>(`/tasks/${t.id}`);
-      setRuns(r);
-    } catch {
-      setRunsError(true);
-    }
-  }, [t.id]);
+  const [runsError, setRunsError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const followerRef = useRef<ReturnType<typeof followTaskRuns> | null>(null);
+  const loadRuns = () => followerRef.current?.refresh();
 
   useEffect(() => {
     setRuns(null);
     setNotice(null);
-    void loadRuns();
-  }, [loadRuns]);
+    setLastUpdated(null);
+    const visible = () => document.visibilityState === 'visible';
+    const follower = followTaskRuns(
+      t.id,
+      (next) => {
+        setRuns(next);
+        setLastUpdated(new Date());
+        setRunsError(null);
+      },
+      setRunsError,
+      visible,
+    );
+    followerRef.current = follower;
+    follower.refresh();
+    const focus = () => {
+      if (visible()) follower.refresh();
+    };
+    const visibility = () => {
+      if (visible()) follower.refresh();
+      else follower.pause();
+    };
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      follower.stop();
+      followerRef.current = null;
+      window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', visibility);
+    };
+  }, [t.id]);
 
   return (
     <div className="content-page space-y-4">
@@ -492,9 +560,11 @@ function TaskDetail(props: {
                 api
                   .post<{ queued: boolean; runId?: string }>(`/tasks/${t.id}/run`)
                   .then((res) => {
+                    if (!followerRef.current) return;
                     setNotice(
                       res.queued ? `Queued (run ${res.runId ?? ''})` : 'Task not active',
                     );
+                    followerRef.current.refresh(res.runId);
                   }),
               )
             }
@@ -528,19 +598,25 @@ function TaskDetail(props: {
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Runs history
         </div>
-        {runsError ? (
+        {lastUpdated && (
+          <p className="mb-2 text-xs text-slate-500">
+            Updated {lastUpdated.toLocaleTimeString()}
+          </p>
+        )}
+        {runsError && (
           <p role="alert" className="text-sm text-red-700">
-            Could not load run history.{' '}
+            {runsError}{' '}
             <button className="underline" onClick={() => void loadRuns()}>
               Retry history
             </button>
           </p>
-        ) : runs === null ? (
+        )}
+        {runs === null ? (
           <div className="text-sm text-slate-400">Loading…</div>
         ) : runs.length === 0 ? (
           <div className="text-sm text-slate-400">No runs yet.</div>
         ) : (
-          <table className="w-full text-left text-sm">
+          <table className="task-run-table w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
                 <th className="py-1 pr-2">status</th>
@@ -553,7 +629,7 @@ function TaskDetail(props: {
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 align-top">
-                  <td className="py-1.5 pr-2">
+                  <td data-label="Status" className="py-1.5 pr-2">
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs ${
                         r.status === 'success'
@@ -568,21 +644,60 @@ function TaskDetail(props: {
                       {r.status}
                     </span>
                   </td>
-                  <td className="py-1.5 pr-2">{r.attempt}</td>
-                  <td className="py-1.5 pr-2 text-xs text-slate-500">
+                  <td data-label="Attempt" className="py-1.5 pr-2">
+                    {r.attempt}
+                  </td>
+                  <td data-label="Available" className="py-1.5 pr-2 text-xs text-slate-500">
                     {new Date(r.availableAt).toLocaleString()}
                   </td>
-                  <td className="py-1.5 pr-2 text-xs text-slate-500">
+                  <td data-label="Finished" className="py-1.5 pr-2 text-xs text-slate-500">
                     {r.finishedAt ? new Date(r.finishedAt).toLocaleString() : '—'}
                   </td>
-                  <td className="break-words py-1.5 text-xs text-slate-600">
-                    {r.error ?? r.result ?? '—'}
+                  <td
+                    data-label="Result / error"
+                    className="min-w-0 break-words py-1.5 text-xs text-slate-600"
+                  >
+                    <RunResult key={`${r.id}-${r.status}`} text={r.error ?? r.result} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  );
+}
+
+function RunResult({ text }: { text: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copyState, setCopyState] = useState('Copy result');
+  if (text === null) return <>—</>;
+  return (
+    <div className="task-result">
+      <div className={expanded ? 'task-result-full' : 'task-result-preview'}>{text}</div>
+      <div className="mt-1 flex flex-wrap gap-3">
+        <button
+          className="underline"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Collapse result' : 'Expand result'}
+        </button>
+        <button
+          className="underline"
+          onClick={() => {
+            void navigator.clipboard.writeText(text).then(
+              () => setCopyState('Copied'),
+              () => setCopyState('Copy unavailable'),
+            );
+          }}
+        >
+          {copyState}
+        </button>
+        <span className="sr-only" role="status">
+          {copyState === 'Copy result' ? '' : copyState}
+        </span>
       </div>
     </div>
   );
