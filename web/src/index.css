@@ -366,6 +366,16 @@ h3 {
 .workspace-gallery {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+@media (min-width: 701px) {
+  .workspace-gallery > .workspace-art-card:only-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, 560px);
+  }
+  .workspace-gallery > .workspace-art-card:only-child .workspace-cover {
+    aspect-ratio: 8 / 5;
+  }
+}
 .workspace-art-card {
   min-width: 0;
   overflow: hidden;
