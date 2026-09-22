@@ -32,12 +32,10 @@ export interface ChatRoutesDeps {
   profileStore: AgentProfileStore;
   wsHub: WsHub;
   logger: Logger;
-  /** Re-reads the layered provider config before each turn (settings chain). */
-  refreshProvider?: () => void;
 }
 
 export function registerChatRoutes(app: Hono<AppEnv>, deps: ChatRoutesDeps): void {
-  const { runtime, workspaceStore, profileStore, wsHub, logger, refreshProvider } = deps;
+  const { runtime, workspaceStore, profileStore, wsHub, logger } = deps;
 
   const requireAccessibleWorkspace = (
     user: { id: string; role: 'admin' | 'member' },
@@ -102,7 +100,6 @@ export function registerChatRoutes(app: Hono<AppEnv>, deps: ChatRoutesDeps): voi
     const user = requireUser(c);
     const session = requireOwnSession(user, c.req.param('id'));
     const body = turnSchema.parse(await c.req.json());
-    refreshProvider?.();
     const profile = session.profile_id
       ? profileStore.byIdFor(user.id, session.profile_id)
       : profileStore.defaultFor(user.id);

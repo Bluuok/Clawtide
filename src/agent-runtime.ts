@@ -31,23 +31,28 @@ export type TurnExecutor = (params: {
 
 export type StreamEmitter = (event: StreamEvent) => void;
 
+export interface RuntimeProvider {
+  apiKey: string | undefined;
+  baseUrl?: string | undefined;
+}
+
 export interface RuntimeDeps {
   db: AppDb;
   logger: Logger;
   apiKey: string | undefined;
   /**
    * Optional Anthropic-compatible endpoint override. Read at each turn so a
-   * settings-page update takes effect without restart; server.ts keeps it
-   * fresh from the settings priority chain (persisted > env > SDK default).
+   * settings-page update takes effect without restart via resolveProvider.
    */
   baseUrl?: string | undefined;
+  /** Resolve once when a turn starts, after its per-session queue wait. */
+  resolveProvider?: () => RuntimeProvider;
   executeTurn?: TurnExecutor;
 }
 
 export class AgentRuntime {
   private readonly serial = new SerialQueue();
-  // Visible to the server assembly so the provider settings chain can keep
-  // `baseUrl` current without exposing every dep as mutable API.
+  // Dependencies stay inspectable for callers and injected executors.
   readonly deps: RuntimeDeps;
 
   constructor(deps: RuntimeDeps) {
@@ -55,7 +60,7 @@ export class AgentRuntime {
   }
 
   isConfigured(): boolean {
-    return this.deps.apiKey !== undefined && this.deps.apiKey.length > 0;
+    return Boolean((this.deps.resolveProvider?.() ?? this.deps).apiKey);
   }
 
   // ---- session lifecycle --------------------------------------------------
@@ -139,7 +144,8 @@ export class AgentRuntime {
     emit({ type: 'turn_started', sessionId: session.id, ts: started });
     this.persist(session.thread_id, session.id, 'user', prompt, started);
 
-    if (!this.isConfigured()) {
+    const provider = this.deps.resolveProvider?.() ?? this.deps;
+    if (!provider.apiKey) {
       const ts = nowIso();
       emit({
         type: 'error',
@@ -161,12 +167,12 @@ export class AgentRuntime {
           ? { systemPrompt: opts.systemPrompt }
           : {}),
         env: {
-          ANTHROPIC_API_KEY: this.deps.apiKey ?? '',
+          ANTHROPIC_API_KEY: provider.apiKey,
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
           // Anthropic-compatible endpoint override (settings chain); absent →
           // the SDK's default endpoint is used.
-          ...(this.deps.baseUrl !== undefined && this.deps.baseUrl.length > 0
-            ? { ANTHROPIC_BASE_URL: this.deps.baseUrl }
+          ...(provider.baseUrl !== undefined && provider.baseUrl.length > 0
+            ? { ANTHROPIC_BASE_URL: provider.baseUrl }
             : {}),
         },
         hooks: {

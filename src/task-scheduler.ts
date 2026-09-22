@@ -400,26 +400,35 @@ export class TaskScheduler {
     return res.changes > 0;
   }
 
-  /** Immediate run: same materialization path → idempotent by key. */
+  /** Coalesce active immediate runs; retain a unique occurrence for each later request. */
   runNow(taskId: string): { queued: boolean; runId?: string } {
-    const task = this.stmtTaskById.get(taskId) as ScheduledTaskRow | undefined;
-    if (task === undefined || task.status !== 'active' || task.deleted_at !== null) {
-      return { queued: false };
-    }
-    const nowStr = new Date(this.now()).toISOString();
-    const key = `${task.id}:now`;
-    // Immediate occurrences are keyed per task, NOT per call — a second
-    // runNow while one is queued/running is an idempotent skip.
-    const existing = this.deps.db.db
-      .prepare(
-        "SELECT id FROM task_runs WHERE occurrence_key = ? AND status NOT IN ('success','failed','missed','cancelled')",
-      )
-      .get(key) as { id: string } | undefined;
-    if (existing !== undefined) return { queued: true, runId: existing.id };
-    const id = randomBytes(16).toString('hex');
-    const ok =
-      this.stmtInsertRun.run(id, task.id, key, 'immediate', nowStr, nowStr).changes > 0;
-    return { queued: ok, runId: ok ? id : undefined };
+    // Lock before checking so separate scheduler processes cannot both insert.
+    return this.deps.db.db
+      .transaction(() => {
+        const task = this.stmtTaskById.get(taskId) as ScheduledTaskRow | undefined;
+        if (task === undefined || task.status !== 'active' || task.deleted_at !== null) {
+          return { queued: false };
+        }
+        const nowStr = new Date(this.now()).toISOString();
+        const existing = this.deps.db.db
+          .prepare(
+            "SELECT id FROM task_runs WHERE task_id = ? AND trigger_type = 'immediate' AND status NOT IN ('success','failed','missed','cancelled') ORDER BY created_at, id LIMIT 1",
+          )
+          .get(task.id) as { id: string } | undefined;
+        if (existing !== undefined) return { queued: true, runId: existing.id };
+        const id = randomBytes(16).toString('hex');
+        const ok =
+          this.stmtInsertRun.run(
+            id,
+            task.id,
+            `${task.id}:now:${id}`,
+            'immediate',
+            nowStr,
+            nowStr,
+          ).changes > 0;
+        return { queued: ok, runId: ok ? id : undefined };
+      })
+      .immediate();
   }
 
   // ---- claim + execute -----------------------------------------------------

@@ -698,3 +698,59 @@ describe('R14 run lifecycle', () => {
     }
   });
 });
+
+describe('manual occurrence lifecycle regression', () => {
+  it.each(['success', 'failed', 'missed', 'cancelled'] as const)(
+    'allows another request after %s, retaining legacy history',
+    (status) => {
+      const ctx = makeCtx();
+      try {
+        seedTask(ctx);
+        const s = scheduler(ctx);
+        s.insertRun('task1', 'task1:now', 'immediate', new Date(ctx.nowMs).toISOString());
+        ctx.db.db
+          .prepare("UPDATE task_runs SET status = ? WHERE occurrence_key = 'task1:now'")
+          .run(status);
+        const next = s.runNow('task1');
+        expect(next.queued).toBe(true);
+        expect(next.runId).toBeTruthy();
+        expect(s.runNow('task1').runId).toBe(next.runId);
+        const rows = ctx.db.db
+          .prepare("SELECT * FROM task_runs WHERE task_id = 'task1'")
+          .all() as TaskRunRow[];
+        expect(rows).toHaveLength(2);
+        expect(rows.find((r) => r.occurrence_key === 'task1:now')?.status).toBe(status);
+      } finally {
+        ctx.db.close();
+        cleanupDir(ctx.config.dataDir);
+      }
+    },
+  );
+  it.each(['queued', 'running', 'retry_wait'] as const)(
+    'coalesces %s legacy requests across connections',
+    (status) => {
+      const ctx = makeCtx();
+      const other = openDatabase({ config: ctx.config, logger: silent, backupDisabled: true });
+      try {
+        seedTask(ctx);
+        const first = scheduler(ctx);
+        first.insertRun('task1', 'task1:now', 'immediate', new Date(ctx.nowMs).toISOString());
+        ctx.db.db
+          .prepare("UPDATE task_runs SET status = ? WHERE occurrence_key = 'task1:now'")
+          .run(status);
+        const second = new TaskScheduler({ db: other, logger: silent, now: () => ctx.nowMs });
+        const a = first.runNow('task1');
+        const b = second.runNow('task1');
+        expect(a.queued).toBe(true);
+        expect(b).toEqual(a);
+        expect(
+          ctx.db.db.prepare("SELECT * FROM task_runs WHERE task_id = 'task1'").all(),
+        ).toHaveLength(1);
+      } finally {
+        other.close();
+        ctx.db.close();
+        cleanupDir(ctx.config.dataDir);
+      }
+    },
+  );
+});

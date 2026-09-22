@@ -252,3 +252,44 @@ describe('AgentRuntime lifecycle', () => {
     }
   });
 });
+
+describe('provider snapshot timing', () => {
+  it('uses an immutable provider pair per turn and resolves queued turns when they start', async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const started = new Promise<void>((r) => {
+      entered = r;
+    });
+    const seen: Options[] = [];
+    const { runtime, db, config } = makeRuntime(undefined, async function* ({ options }) {
+      seen.push(options);
+      if (seen.length === 1) {
+        entered();
+        await gate;
+      }
+      yield { type: 'result', subtype: 'success' } as SDKMessage;
+    });
+    let current = { apiKey: 'first', baseUrl: 'https://first.invalid' };
+    runtime.deps.resolveProvider = () => ({ ...current });
+    try {
+      const session = runtime.createSession({ workspaceId: 'ws1' });
+      const first = runtime.sendMessage(session, 'first', () => {});
+      await started;
+      const second = runtime.sendMessage(session, 'second', () => {});
+      current = { apiKey: 'second', baseUrl: 'https://second.invalid' };
+      release();
+      await Promise.all([first, second]);
+      expect(seen.map((o) => [o.env?.ANTHROPIC_API_KEY, o.env?.ANTHROPIC_BASE_URL])).toEqual([
+        ['first', 'https://first.invalid'],
+        ['second', 'https://second.invalid'],
+      ]);
+    } finally {
+      release();
+      db.close();
+      cleanupDir(config.dataDir);
+    }
+  });
+});

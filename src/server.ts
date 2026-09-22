@@ -36,6 +36,7 @@ import {
   WhatsAppAdapter,
 } from './channels/channel-skeletons.js';
 import type { ImChannelAdapter } from './im-channel.js';
+import { PROVIDER_API_KEY_KEY, PROVIDER_BASE_URL_KEY } from './routes/settings.js';
 
 export interface StartOptions {
   config: AppConfig;
@@ -92,20 +93,13 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     db,
     logger: logger.child({ component: 'agent-runtime' }),
     apiKey: process.env.ANTHROPIC_API_KEY,
+    // Resolve all ingress paths at execution time: persisted settings > env.
+    resolveProvider: () => ({
+      apiKey: db.settings.get(PROVIDER_API_KEY_KEY) || process.env.ANTHROPIC_API_KEY,
+      baseUrl: db.settings.get(PROVIDER_BASE_URL_KEY) || process.env.ANTHROPIC_BASE_URL,
+    }),
     executeTurn: opts.executeTurn,
   });
-
-  // Provider settings (MUST-lite): the settings page persists an
-  // Anthropic-compatible endpoint. Resolution order: persisted web settings >
-  // env > SDK default. Re-applied at turn time via onChat/HTTP route paths so
-  // a settings update takes effect without a restart.
-  const providerBaseUrl = (): string | undefined => {
-    const persisted = db.settings.get('provider.baseUrl');
-    if (persisted !== undefined && persisted.length > 0) return persisted;
-    const envBase = process.env.ANTHROPIC_BASE_URL;
-    return envBase !== undefined && envBase.length > 0 ? envBase : undefined;
-  };
-  runtime.deps.baseUrl = providerBaseUrl();
 
   // ---- R14 scheduler -------------------------------------------------------
   // Task execution lands on the same runtime path as chat turns: an isolated
@@ -178,7 +172,6 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
           const turnOpts = {
             systemPrompt: profile !== undefined ? buildSystemPrompt(profile) : undefined,
           };
-          runtime.deps.baseUrl = providerBaseUrl();
           await runtime.sendMessage(
             session,
             content,
@@ -202,9 +195,6 @@ export async function startServer(opts: StartOptions): Promise<RunningServer> {
     wsHub,
     taskStore,
     scheduler,
-    refreshProvider: () => {
-      runtime.deps.baseUrl = providerBaseUrl();
-    },
   };
 
   // ---- R07 IM channels -----------------------------------------------------

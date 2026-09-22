@@ -50,8 +50,6 @@ export interface AppServices {
   scheduler: TaskScheduler;
   /** IM adapter registry + mount resolution (R07). */
   imManager?: ImManager;
-  /** Re-applies the provider settings chain to the runtime deps. */
-  refreshProvider?: () => void;
 }
 
 export interface ServerDeps {
@@ -185,7 +183,6 @@ export function createApp(deps: ServerDeps): Hono<AppEnv> {
       profileStore: svc.profileStore,
       wsHub: svc.wsHub,
       logger: deps.logger,
-      refreshProvider: svc.refreshProvider,
     });
     registerTaskRoutes(app, {
       taskStore: svc.taskStore,
