@@ -14,23 +14,23 @@ import { useMemoryDrafts } from '../stores/memoryDrafts.js';
 const SEGMENTS = [
   {
     key: 'identity',
-    label: 'Identity',
-    description: 'Define who your worker is, its role, and how it introduces itself.',
+    label: '身份',
+    description: '设定数字员工的身份、职责和自我介绍。',
   },
   {
     key: 'soul',
-    label: 'Values',
-    description: 'Describe its principles, tone, and boundaries.',
+    label: '价值观',
+    description: '描述它的原则、语气和行为边界。',
   },
   {
     key: 'agents',
-    label: 'Working rules',
-    description: 'Set priorities, collaboration habits, and how work should be approached.',
+    label: '工作规则',
+    description: '设定优先级、协作习惯和工作方式。',
   },
   {
     key: 'tools',
-    label: 'Tools',
-    description: 'Explain when and how available tools should be used.',
+    label: '工具',
+    description: '说明何时以及如何使用可用工具。',
   },
 ] as const;
 
@@ -55,7 +55,7 @@ export function ProfilesPage() {
       setProfiles(list);
       setActiveId((prev) => prev ?? list[0]?.id ?? null);
     } catch {
-      setError('Could not load profiles. Please try again.');
+      setError('无法加载数字员工，请重试。');
     } finally {
       setLoading(false);
     }
@@ -75,28 +75,28 @@ export function ProfilesPage() {
         onClick={sidebar.toggle}
       >
         <span>
-          Your workers <span className="session-count">{profiles.length}</span>
+          我的数字员工 <span className="session-count">{profiles.length}</span>
         </span>
-        <span>{sidebar.open ? 'Close −' : 'Browse +'}</span>
+        <span>{sidebar.open ? '收起 −' : '浏览 +'}</span>
       </button>
       {sidebar.open && (
         <button
           type="button"
           className="sidebar-backdrop"
-          aria-label="Close profiles panel"
+          aria-label="关闭数字员工列表"
           onClick={() => sidebar.close()}
         />
       )}
       <div ref={sidebar.panelRef} className="list-panel profiles-sidebar" id="profiles-sidebar">
         <div className="task-filters">
-          <span className="eyebrow">Your digital workers</span>
+          <span className="eyebrow">我的数字员工</span>
           <input
             ref={sidebar.primaryFocusRef as React.RefObject<HTMLInputElement | null>}
             type="search"
-            aria-label="Find profiles"
+            aria-label="搜索数字员工"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a profile…"
+            placeholder="搜索数字员工…"
           />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -112,18 +112,16 @@ export function ProfilesPage() {
                 disabled={editing && p.id !== activeId}
                 aria-pressed={p.id === activeId}
                 title={
-                  editing && p.id !== activeId
-                    ? 'Save or discard your changes before switching profiles.'
-                    : p.name
+                  editing && p.id !== activeId ? '切换数字员工前，请先保存或放弃更改。' : p.name
                 }
                 className={`block w-full px-3 py-2 text-left text-sm ${
                   p.id === activeId ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'
                 }`}
               >
                 {p.name}
-                {p.isDefault && <span className="ml-1 text-xs text-emerald-600">default</span>}
+                {p.isDefault && <span className="ml-1 text-xs text-emerald-600">默认</span>}
                 <span className="block text-xs text-slate-400">
-                  v{p.version} · {p.promptMode}
+                  v{p.version} · {p.promptMode === 'append' ? '追加' : '替换'}
                 </span>
               </button>
             ))}
@@ -131,7 +129,7 @@ export function ProfilesPage() {
             profiles.filter((p) => p.name.toLowerCase().includes(query.toLowerCase().trim()))
               .length === 0 && (
               <p className="session-help">
-                {query ? 'No matching profiles.' : 'Create your first digital worker below.'}
+                {query ? '没有匹配的数字员工。' : '在下方创建你的第一个数字员工。'}
               </p>
             )}
         </div>
@@ -151,7 +149,7 @@ export function ProfilesPage() {
         <p role="alert" className="text-sm text-red-700">
           {error}{' '}
           <button className="underline" onClick={() => void reload()}>
-            Retry
+            重试
           </button>
         </p>
       )}
@@ -170,18 +168,18 @@ export function ProfilesPage() {
         />
       ) : loading ? (
         <div className="chat-loading" role="status">
-          Loading profiles…
+          正在加载数字员工…
         </div>
       ) : (
         <div className="empty-action">
-          <EmptyState title="Shape your digital worker." art="linen">
-            Create a profile to define its identity, values, working rules, and tools.
+          <EmptyState title="打造你的数字员工。" art="linen">
+            创建数字员工，定义身份、价值观、工作规则和工具。
           </EmptyState>
           <button
             className="min-h-11 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
             onClick={() => sidebar.openAndFocus(newProfileRef.current)}
           >
-            Create a profile
+            创建数字员工
           </button>
         </div>
       )}
@@ -214,7 +212,7 @@ function NewProfileButton({
       onCreated(profile);
       setName('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create profile.');
+      setError(err instanceof ApiError ? err.message : '创建数字员工失败。');
     } finally {
       setBusy(false);
     }
@@ -223,8 +221,8 @@ function NewProfileButton({
     <>
       <input
         ref={inputRef}
-        aria-label="New profile name"
-        placeholder="Give your worker a name"
+        aria-label="新数字员工名称"
+        placeholder="给数字员工起个名字"
         maxLength={120}
         value={name}
         disabled={disabled || busy}
@@ -241,7 +239,7 @@ function NewProfileButton({
         disabled={busy || disabled || !name.trim()}
         className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
       >
-        {busy ? 'Creating…' : '+ New profile'}
+        {busy ? '创建中…' : '+ 新建数字员工'}
       </button>
     </>
   );
@@ -313,9 +311,9 @@ function ProfileEditor(props: {
       if (dirty) {
         // Draft is based on a stale version — warn but do NOT replace text.
         setStaleWarning(
-          `The profile was updated to v${p.version} externally. ` +
-            `Your draft is still based on v${baseVersion}. ` +
-            `Discard your draft to load the latest version.`,
+          `数字员工已在其他位置更新到 v${p.version}。` +
+            `你的草稿仍基于 v${baseVersion}。` +
+            '放弃当前草稿即可加载最新版本。',
         );
         return;
       }
@@ -418,7 +416,7 @@ function ProfileEditor(props: {
       setStaleWarning(null);
     } catch (err) {
       if (getAuthEpoch() !== epochAtCall) return;
-      setError(err instanceof ApiError ? err.message : 'save failed');
+      setError(err instanceof ApiError ? err.message : '保存失败');
     } finally {
       if (getAuthEpoch() === epochAtCall) setBusy(false);
     }
@@ -438,7 +436,7 @@ function ProfileEditor(props: {
       props.onDefaultChanged(updated);
     } catch (err) {
       if (getAuthEpoch() !== epochAtCall) return;
-      setDefaultError(err instanceof ApiError ? err.message : 'Could not set default profile.');
+      setDefaultError(err instanceof ApiError ? err.message : '设置默认数字员工失败。');
     } finally {
       if (getAuthEpoch() === epochAtCall) setDefaultBusy(false);
     }
@@ -449,14 +447,14 @@ function ProfileEditor(props: {
       <div className="content-page space-y-4">
         <div className="profile-intro">
           <ArtImage kind="linen" className="profile-art" />
-          <span className="eyebrow">Profile / Version {p.version}</span>
-          <h2>Give your worker character.</h2>
-          <p>Four thoughtful pieces, one consistent way of working.</p>
+          <span className="eyebrow">数字员工 / 版本 {p.version}</span>
+          <h2>赋予数字员工鲜明的个性。</h2>
+          <p>用四项设定，形成一致的工作方式。</p>
         </div>
         <div className="editor-toolbar profile-toolbar">
           <input
             value={name}
-            aria-label="Profile name"
+            aria-label="数字员工名称"
             disabled={busy}
             onChange={(e) => {
               setName(e.target.value);
@@ -465,42 +463,42 @@ function ProfileEditor(props: {
           />
           <select
             value={mode}
-            aria-label="Prompt mode"
+            aria-label="提示词模式"
             disabled={busy}
             onChange={(e) => {
               setMode(e.target.value as 'append' | 'replace');
             }}
             className="rounded-md border border-slate-300 px-2 py-2 text-sm"
           >
-            <option value="append">append</option>
-            <option value="replace">replace</option>
+            <option value="append">追加</option>
+            <option value="replace">替换</option>
           </select>
           <button
             onClick={() => void save()}
             disabled={!dirty || busy || !name.trim()}
             className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {busy ? 'Saving…' : 'Save (new version)'}
+            {busy ? '保存中…' : '保存为新版本'}
           </button>
           <button
             onClick={discard}
             disabled={!dirty || busy}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 disabled:opacity-50"
           >
-            Discard
+            放弃更改
           </button>
         </div>
         <p className={`profile-save-state ${dirty ? 'is-dirty' : ''}`} role="status">
           {dirty
-            ? 'Unsaved changes — save or discard before switching profiles.'
+            ? '有未保存的更改，请先保存或放弃后再切换。'
             : saved
-              ? 'Saved as a new version.'
-              : 'All changes saved.'}
+              ? '已保存为新版本。'
+              : '所有更改已保存。'}
         </p>
         <p className="session-help">
           {mode === 'append'
-            ? 'Append adds these instructions to the base profile.'
-            : 'Replace replaces the editable base instructions. Platform rules still apply.'}
+            ? '追加模式：在基础设定后添加这些指令。'
+            : '替换模式：替换可编辑的基础指令，平台规则仍然生效。'}
         </p>
         {staleWarning !== null && (
           <p role="alert" className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -511,9 +509,7 @@ function ProfileEditor(props: {
         {/* Set as default */}
         <div className="flex items-center gap-3">
           {p.isDefault ? (
-            <span className="text-sm text-emerald-700 font-medium">
-              ✓ This is the default profile
-            </span>
+            <span className="text-sm text-emerald-700 font-medium">✓ 当前默认数字员工</span>
           ) : (
             <>
               <button
@@ -521,7 +517,7 @@ function ProfileEditor(props: {
                 disabled={defaultBusy}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
               >
-                {defaultBusy ? 'Setting…' : 'Set as default'}
+                {defaultBusy ? '设置中…' : '设为默认'}
               </button>
               {defaultError !== null && (
                 <span className="text-sm text-red-600">{defaultError}</span>
@@ -529,7 +525,7 @@ function ProfileEditor(props: {
             </>
           )}
         </div>
-        <div className="profile-sections" aria-label="Profile sections">
+        <div className="profile-sections" aria-label="数字员工设置分区">
           {SEGMENTS.map((s) => (
             <button
               key={s.key}
@@ -559,7 +555,7 @@ function ProfileEditor(props: {
               className="w-full resize-y rounded-md border border-slate-300 px-3 py-2 font-mono text-sm focus:border-slate-500 focus:outline-none"
             />
             <p className="profile-character-count">
-              {segs[s.key].length.toLocaleString()} characters · {s.key.toUpperCase()}
+              {segs[s.key].length.toLocaleString()} 字 · {s.key.toUpperCase()}
             </p>
           </div>
         ))}
@@ -570,15 +566,11 @@ function ProfileEditor(props: {
           onRestored={(np) => props.onSaved(np)}
         />
         <details className="profile-advanced">
-          <summary>Advanced: publish a draft</summary>
+          <summary>高级：发布草稿</summary>
           <fieldset disabled={dirty || busy}>
             <DraftFlow key={p.id} profile={p} onPublished={() => void props.onReload()} />
           </fieldset>
-          {dirty && (
-            <p className="session-help">
-              Save or discard your changes before publishing a draft.
-            </p>
-          )}
+          {dirty && <p className="session-help">发布草稿前，请先保存或放弃更改。</p>}
         </details>
       </div>
     </div>
@@ -605,7 +597,7 @@ function VersionHistory(props: {
       );
       setVersions(v);
     } catch {
-      setError('Could not load version history. Please retry.');
+      setError('无法加载版本历史，请重试。');
     } finally {
       setLoading(false);
     }
@@ -621,7 +613,7 @@ function VersionHistory(props: {
       });
       props.onRestored(profile);
     } catch {
-      setError('Could not restore this version. Please try again.');
+      setError('恢复此版本失败，请重试。');
     } finally {
       setBusyVersion(null);
     }
@@ -631,17 +623,17 @@ function VersionHistory(props: {
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Version history
+          版本历史
         </span>
         <button
           disabled={loading}
           onClick={() => void load()}
           className="text-xs text-slate-600 underline"
         >
-          {loading ? 'Loading…' : versions === null ? 'Show history' : 'Refresh history'}
+          {loading ? '加载中…' : versions === null ? '查看历史' : '刷新历史'}
         </button>
       </div>
-      <p className="session-help">Restoring keeps existing versions and creates a new one.</p>
+      <p className="session-help">恢复时会保留现有版本，并创建一个新版本。</p>
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
@@ -659,11 +651,11 @@ function VersionHistory(props: {
                 disabled={props.disabled || busyVersion !== null}
                 className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 disabled:opacity-50"
               >
-                Restore
+                恢复
               </button>
             </li>
           ))}
-          {versions.length === 0 && <li className="text-slate-400">No history yet.</li>}
+          {versions.length === 0 && <li className="text-slate-400">暂无版本历史。</li>}
         </ul>
       )}
     </div>
@@ -759,7 +751,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
           ? err.message
           : err instanceof Error
             ? err.message
-            : 'draft failed',
+            : '创建草稿失败',
       );
     } finally {
       if (getAuthEpoch() === epochAtCall) setBusy(false);
@@ -795,9 +787,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
         // For non-400 ApiErrors we intentionally do NOT reset draftId/phrase/confirm.
       } else {
         // Network TypeError or other unexpected error — show message, retain all state.
-        setError(
-          'Publish status unconfirmed. Your draft and confirmation are retained. Check the profile before trying again.',
-        );
+        setError('发布状态未确认，草稿和确认短语已保留。请检查数字员工设置后再重试。');
       }
     } finally {
       if (getAuthEpoch() === epochAtCall) setBusy(false);
@@ -807,7 +797,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Two-stage AI draft publish (draft → confirm phrase → publish)
+        分两步发布 AI 草稿（创建草稿 → 输入确认短语 → 发布）
       </div>
       {draftId === null ? (
         <div className="space-y-2">
@@ -816,7 +806,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
             onChange={(e) => setDraftJson(e.target.value)}
             rows={5}
             placeholder={
-              'Optional draft JSON — empty uses the current profile:\n{"name": …, "identity": …, "soul": …, "agents": …, "tools": …, "promptMode": "append"|"replace"}'
+              '可选的草稿 JSON，留空则使用当前数字员工设置：\n{"name": …, "identity": …, "soul": …, "agents": …, "tools": …, "promptMode": "append"|"replace"}'
             }
             className="w-full resize-y rounded-md border border-slate-300 px-3 py-2 font-mono text-xs"
           />
@@ -825,22 +815,21 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
             disabled={busy}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
           >
-            {busy ? 'Creating…' : 'Stage 1: Create draft'}
+            {busy ? '创建中…' : '第一步：创建草稿'}
           </button>
         </div>
       ) : (
         <div className="space-y-2">
           <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Draft created. Confirm phrase:{' '}
-            <span className="font-mono font-semibold">{phrase}</span>
+            草稿已创建，确认短语： <span className="font-mono font-semibold">{phrase}</span>
             <span className="block text-xs text-amber-700">
-              Type the phrase exactly to publish. A mismatch aborts the draft.
+              请完整输入确认短语后发布，输入不一致将终止草稿。
             </span>
           </div>
           <input
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Type the confirmation phrase"
+            placeholder="输入确认短语"
             className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
           />
           <button
@@ -848,7 +837,7 @@ function DraftFlow(props: { profile: Profile; onPublished: () => void }) {
             disabled={busy || confirm.length === 0}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {busy ? 'Publishing…' : 'Stage 2: Publish'}
+            {busy ? '发布中…' : '第二步：发布'}
           </button>
         </div>
       )}

@@ -82,7 +82,7 @@ export function ChatPage() {
       }
     } catch {
       if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
-        setError('Could not load your conversations.');
+        setError('无法加载会话列表。');
       }
     } finally {
       if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
@@ -120,7 +120,7 @@ export function ChatPage() {
       sidebar.close();
     } catch {
       if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
-        setError('Could not create a conversation. Please try again.');
+        setError('创建会话失败，请重试。');
       }
     } finally {
       if (mountedRef.current && startEpoch === useMemoryDrafts.getState().authEpoch) {
@@ -134,9 +134,9 @@ export function ChatPage() {
   const workerDisplay = activeSession
     ? activeSession.profileId
       ? boundProfile
-        ? `Worker: ${boundProfile.name}`
-        : `Worker: Unavailable worker (${activeSession.profileId.slice(0, 8)})`
-      : 'Worker: Default worker (auto-resolved)'
+        ? `数字员工：${boundProfile.name}`
+        : `数字员工：暂不可用（${activeSession.profileId.slice(0, 8)}）`
+      : '数字员工：默认（自动选择）'
     : null;
 
   return (
@@ -149,15 +149,15 @@ export function ChatPage() {
         onClick={sidebar.toggle}
       >
         <span>
-          Conversations <span className="session-count">{sessions.length}</span>
+          会话列表 <span className="session-count">{sessions.length}</span>
         </span>
-        <span>{sidebar.open ? 'Close −' : 'Browse +'}</span>
+        <span>{sidebar.open ? '收起 −' : '浏览 +'}</span>
       </button>
       {sidebar.open && (
         <button
           type="button"
           className="sidebar-backdrop"
-          aria-label="Close conversations panel"
+          aria-label="关闭会话列表"
           onClick={() => sidebar.close()}
         />
       )}
@@ -179,14 +179,14 @@ export function ChatPage() {
           <p role="alert" className="mb-3 text-sm text-red-700">
             {error}
             <button className="ml-3 underline" onClick={() => void loadLists()}>
-              Retry
+              重试
             </button>
           </p>
         )}
         <header className="chat-heading">
           <div className="flex items-center justify-between">
             <div>
-              <h2>{activeWorkspace?.displayName ?? 'Your next conversation'}</h2>
+              <h2>{activeWorkspace?.displayName ?? '开始新的会话'}</h2>
               {workerDisplay && (
                 <span className="block mt-0.5 text-xs font-medium text-slate-500">
                   {workerDisplay}
@@ -199,14 +199,14 @@ export function ChatPage() {
                 role="status"
               >
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                Working on a turn…
+                正在回复…
               </span>
             )}
           </div>
           <p>
             {activeId
-              ? `Conversation ${activeId.slice(0, 8)} · A space for your next good idea.`
-              : 'A little space to explore, plan, and make progress.'}
+              ? `会话 ${activeId.slice(0, 8)} · 在这里开启下一个好想法。`
+              : '在这里探索想法、制定计划、推进工作。'}
           </p>
         </header>
         {activeId !== null ? (
@@ -217,18 +217,18 @@ export function ChatPage() {
           />
         ) : loading ? (
           <div className="chat-loading" role="status">
-            Opening your workspace…
+            正在打开工作区…
           </div>
         ) : (
           <div className="empty-action">
-            <EmptyState title="What is on your mind?" art="light">
-              Choose a workspace to start a conversation with your digital worker.
+            <EmptyState title="有什么想聊的？" art="light">
+              选择一个工作区，开始与数字员工对话。
             </EmptyState>
             <button
               className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
               onClick={() => sidebar.openAndFocus(createSessionRef.current)}
             >
-              Start a conversation
+              开始会话
             </button>
           </div>
         )}
@@ -279,14 +279,14 @@ function SessionSidebar(props: {
     >
       <div className="conversation-sidebar-head">
         <div className="conversation-sidebar-title">
-          <span className="eyebrow">Conversations</span>
+          <span className="eyebrow">会话列表</span>
           <span className="session-count">{props.sessions.length}</span>
         </div>
         <input
           ref={props.searchRef as React.RefObject<HTMLInputElement | null>}
           type="search"
-          aria-label="Find conversations"
-          placeholder="Find a conversation…"
+          aria-label="搜索会话"
+          placeholder="搜索会话…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -294,14 +294,12 @@ function SessionSidebar(props: {
       <div className="session-results min-h-0 flex-1 overflow-y-auto">
         {props.loading && (
           <p className="session-help" role="status">
-            Loading conversations…
+            正在加载会话…
           </p>
         )}
         {!props.loading && filtered.length === 0 && (
           <p className="session-help">
-            {query
-              ? 'No matching conversations.'
-              : 'A fresh start. Create your first conversation below.'}
+            {query ? '没有匹配的会话。' : '在下方创建你的第一个会话。'}
           </p>
         )}
         {filtered.map((s) => (
@@ -309,14 +307,13 @@ function SessionSidebar(props: {
             key={s.id}
             onClick={() => props.onSelect(s.id)}
             aria-pressed={s.id === props.activeId}
-            aria-label={`Open conversation ${s.id}`}
+            aria-label={`打开会话 ${s.id}`}
             className={`block w-full px-3 py-2 text-left text-sm ${
               s.id === props.activeId ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'
             }`}
           >
             <span className="session-label block truncate">
-              {props.workspaces.find((w) => w.id === s.workspaceId)?.displayName ??
-                'Conversation'}
+              {props.workspaces.find((w) => w.id === s.workspaceId)?.displayName ?? '会话'}
             </span>
             <span className="block truncate text-xs text-slate-500">
               {new Date(s.updatedAt).toLocaleDateString()} · {s.id.slice(0, 6)}
@@ -327,21 +324,21 @@ function SessionSidebar(props: {
       <div className="border-t border-slate-200 p-2">
         <p className="session-help">
           {props.workspaces.length === 0 && !props.loading
-            ? 'Create a workspace first to begin.'
-            : 'Start something new'}
+            ? '请先创建一个工作区。'
+            : '开启新会话'}
         </p>
         {props.profiles.length > 0 && (
           <select
-            aria-label="Worker profile for new conversation"
+            aria-label="新会话使用的数字员工"
             value={newProfileId}
             disabled={props.creating || props.loading}
             className="mb-1.5 w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
             onChange={(e) => setNewProfileId(e.target.value)}
           >
-            <option value="">Worker: Default worker (auto)</option>
+            <option value="">数字员工：默认（自动选择）</option>
             {props.profiles.map((p) => (
               <option key={p.id} value={p.id}>
-                Worker: {p.name} {p.isDefault ? '(default)' : ''}
+                数字员工： {p.name} {p.isDefault ? '(default)' : ''}
               </option>
             ))}
           </select>
@@ -349,7 +346,7 @@ function SessionSidebar(props: {
         <select
           ref={props.createRef}
           disabled={props.creating || props.loading || props.workspaces.length === 0}
-          aria-label="Create a conversation in workspace"
+          aria-label="在工作区中创建会话"
           className="mb-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
           defaultValue=""
           onChange={(e) => {
@@ -360,7 +357,7 @@ function SessionSidebar(props: {
           }}
         >
           <option value="" disabled>
-            {props.creating ? 'Creating…' : 'New conversation in…'}
+            {props.creating ? '创建中…' : '选择工作区新建会话…'}
           </option>
           {props.workspaces.map((w) => (
             <option key={w.id} value={w.id}>
@@ -439,9 +436,9 @@ function Transcript({
       >
         {error && (
           <p role="alert" className="text-sm text-red-700">
-            Could not load messages.{' '}
+            无法加载消息。{' '}
             <button className="underline" onClick={() => setRetry((n) => n + 1)}>
-              Retry
+              重试
             </button>
           </p>
         )}
@@ -449,13 +446,13 @@ function Transcript({
           <p role="status" className="mb-2 text-xs text-amber-700">
             {syncError}{' '}
             <button className="underline" onClick={() => void loadTranscript(sessionId)}>
-              Sync now
+              立即同步
             </button>
           </p>
         )}
         {hiddenCount > 0 && (
           <div className="mb-3 text-center text-xs text-slate-400">
-            ↑ {hiddenCount} earlier messages (scroll to top to load more)
+            ↑ {hiddenCount} 条较早消息（滚动到顶部加载更多）
           </div>
         )}
         <div className="mx-auto max-w-3xl space-y-6">
@@ -464,19 +461,19 @@ function Transcript({
           ))}
           {loading && visible.length === 0 && (
             <div className="chat-loading" role="status">
-              Loading conversation…
+              正在加载会话…
             </div>
           )}
           {!loading && !error && visible.length === 0 && (
             <div className="chat-empty">
-              <EmptyState title="Begin with a thought." art="light">
-                Ask a question, explore an idea, or plan your next step.
+              <EmptyState title="从一个想法开始。" art="light">
+                提出问题、探索想法，或规划下一步。
               </EmptyState>
               <div className="suggestion-list">
                 {[
-                  'Help me plan a focused day.',
-                  'Turn an idea into a clear plan.',
-                  'Help me research a topic.',
+                  '帮我规划高效的一天。',
+                  '帮我把想法整理成清晰的计划。',
+                  '帮我研究一个主题。',
                 ].map((text) => (
                   <button key={text} onClick={() => onSuggestion(text)}>
                     {text}
@@ -498,7 +495,7 @@ function Transcript({
             setShowLatest(false);
           }}
         >
-          ↓ Latest messages
+          ↓ 最新消息
         </button>
       )}
     </div>
@@ -507,13 +504,13 @@ function Transcript({
 
 function MessageBubble({ entry }: { entry: ChatEntry }) {
   const isUser = entry.role === 'user';
-  const [copyState, setCopyState] = useState('Copy');
+  const [copyState, setCopyState] = useState('复制');
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(entry.content);
-      setCopyState('Copied');
+      setCopyState('已复制');
     } catch {
-      setCopyState('Copy unavailable');
+      setCopyState('复制失败');
     }
   };
 
@@ -525,15 +522,15 @@ function MessageBubble({ entry }: { entry: ChatEntry }) {
       entry.toolStatus === 'started'
         ? '…'
         : entry.toolStatus === 'failed' || entry.isError
-          ? 'failed'
-          : 'done';
+          ? '失败'
+          : '完成';
     const label = entry.toolName
       ? `${entry.toolName} ${statusText}`
       : entry.content.replace(/^tool:\s*/, '');
     return (
       <details className="tool-activity">
         <summary>
-          Tool activity <span>{label}</span>
+          工具活动 <span>{label}</span>
         </summary>
         <p>{entry.content}</p>
       </details>
@@ -552,22 +549,22 @@ function MessageBubble({ entry }: { entry: ChatEntry }) {
         }`}
       >
         <div className="message-meta">
-          {isUser ? 'You' : 'Clawtide'} ·{' '}
+          {isUser ? '你' : 'Clawtide'} ·{' '}
           {new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           {entry.status === 'failed' && (
             <span className="ml-2 font-medium text-red-600" role="status">
-              · Failed to send
+              · 发送失败
             </span>
           )}
           {entry.status === 'unconfirmed' && (
             <span className="ml-2 font-medium text-amber-600" role="status">
-              · Unconfirmed
+              · 状态未确认
             </span>
           )}
         </div>
         {entry.interrupted ? (
           <details>
-            <summary>Interrupted output — may be incomplete</summary>
+            <summary>回复已中断，内容可能不完整</summary>
             <MarkdownView content={entry.content} />
           </details>
         ) : isUser || isError ? (
@@ -577,21 +574,21 @@ function MessageBubble({ entry }: { entry: ChatEntry }) {
         )}
         {entry.streaming && (
           <span className="streaming-indicator" role="status">
-            Writing
+            正在回复
             <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-slate-400" />
           </span>
         )}
         {!entry.streaming && (
           <div className="message-actions">
             <button
-              aria-label={`Copy ${isUser ? 'your' : 'assistant'} message`}
+              aria-label={`复制${isUser ? '你的' : '助手'}消息`}
               onClick={() => void copy()}
-              onBlur={() => setCopyState('Copy')}
+              onBlur={() => setCopyState('复制')}
             >
               {copyState}
             </button>
             <span className="sr-only" role="status">
-              {copyState === 'Copy' ? '' : copyState}
+              {copyState === '复制' ? '' : copyState}
             </span>
           </div>
         )}
@@ -622,9 +619,7 @@ function Composer(props: {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError(
-          'Send status unconfirmed (network error). Your draft is retained — please check your connection or retry.',
-        );
+        setError('网络异常，发送状态未确认。草稿已保留，请检查连接后重试。');
       }
     } finally {
       setSending(false);
@@ -641,13 +636,12 @@ function Composer(props: {
         )}
         {isOverlength && (
           <p role="alert" className="mb-2 text-xs font-medium text-red-600">
-            Message length ({props.draft.length.toLocaleString()} characters) exceeds the limit
-            of {MAX_CHAT_CONTENT_LENGTH.toLocaleString()} characters. Please shorten it before
-            sending.
+            消息长度（{props.draft.length.toLocaleString()} 字）超过上限{' '}
+            {MAX_CHAT_CONTENT_LENGTH.toLocaleString()} 字，请缩短后发送。
           </p>
         )}
         <textarea
-          aria-label="Message"
+          aria-label="消息"
           disabled={sending}
           value={props.draft}
           onChange={(e) => {
@@ -661,18 +655,12 @@ function Composer(props: {
             }
           }}
           rows={2}
-          placeholder={
-            props.disabled
-              ? 'Digital worker is responding…'
-              : 'A question, an idea, a next step…'
-          }
+          placeholder={props.disabled ? '数字员工正在回复…' : '说说你的问题、想法或下一步计划…'}
           className="min-w-0 flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
         />
         <div className="composer-footer">
           <small>
-            {props.disabled
-              ? 'Turn in progress…'
-              : 'Enter to send · Shift + Enter for a new line'}
+            {props.disabled ? '正在回复，请稍候…' : 'Enter 发送 · Shift + Enter 换行'}
           </small>
           <button
             onClick={() => void submit()}
@@ -681,7 +669,7 @@ function Composer(props: {
             }
             className="self-end rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {sending ? 'Sending…' : props.disabled ? 'Busy…' : 'Send ↗'}
+            {sending ? '发送中…' : props.disabled ? '处理中…' : '发送 ↗'}
           </button>
         </div>
       </div>

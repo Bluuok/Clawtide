@@ -74,7 +74,7 @@ export function ConfirmAction({
           dialog.current?.showModal();
         }}
       >
-        Delete
+        删除
       </button>
       <dialog ref={dialog} className="confirm-dialog" aria-label={title}>
         <h2>{title}</h2>
@@ -86,7 +86,7 @@ export function ConfirmAction({
             disabled={busy}
             onClick={() => dialog.current?.close()}
           >
-            Cancel
+            取消
           </button>
           <button
             disabled={busy}
@@ -97,13 +97,13 @@ export function ConfirmAction({
                 await onConfirm();
                 dialog.current?.close();
               } catch {
-                setError('Could not delete. Please try again.');
+                setError('删除失败，请重试。');
               } finally {
                 setBusy(false);
               }
             }}
           >
-            {busy ? 'Deleting…' : 'Delete'}
+            {busy ? '删除中…' : '删除'}
           </button>
         </div>
       </dialog>
@@ -182,7 +182,7 @@ export function EmptyState({
           <TideMark />
         </div>
       )}
-      <span className="eyebrow">A little room for possibility</span>
+      <span className="eyebrow">为新的可能留一点空间</span>
       <h2>{title}</h2>
       <p>{children}</p>
     </div>

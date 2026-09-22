@@ -34,7 +34,7 @@ export function WorkspacesPage() {
       if (loadGuard.current.isCurrent(loadToken)) setWorkspaces(list);
     } catch {
       if (loadGuard.current.isCurrent(loadToken)) {
-        setLoadError('Could not load workspaces. Please try again.');
+        setLoadError('无法加载工作区，请重试。');
       }
     } finally {
       loadingRef.current = false;
@@ -63,9 +63,9 @@ export function WorkspacesPage() {
       ]);
       setDisplayName('');
       setQuery('');
-      setNotice('Workspace created.');
+      setNotice('工作区已创建。');
     } catch (err) {
-      setOperationError(err instanceof ApiError ? err.message : 'Could not create workspace.');
+      setOperationError(err instanceof ApiError ? err.message : '创建工作区失败。');
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -87,9 +87,9 @@ export function WorkspacesPage() {
         current.map((item) => (item.id === workspace.id ? workspace : item)),
       );
       setRenaming(null);
-      setNotice('Workspace renamed.');
+      setNotice('工作区已重命名。');
     } catch (err) {
-      setOperationError(err instanceof ApiError ? err.message : 'Could not rename workspace.');
+      setOperationError(err instanceof ApiError ? err.message : '重命名工作区失败。');
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -106,9 +106,9 @@ export function WorkspacesPage() {
       await api.delete(`/workspaces/${ws.id}`);
       loadGuard.current.recordMutation();
       setWorkspaces((current) => current.filter((item) => item.id !== ws.id));
-      setNotice('Workspace deleted.');
+      setNotice('工作区已删除。');
     } catch (err) {
-      setOperationError(err instanceof ApiError ? err.message : 'Could not delete workspace.');
+      setOperationError(err instanceof ApiError ? err.message : '删除工作区失败。');
       throw err;
     } finally {
       busyRef.current = false;
@@ -118,25 +118,23 @@ export function WorkspacesPage() {
 
   return (
     <div className="content-page space-y-4">
-      <h1>A place for every pursuit.</h1>
-      <p className="text-sm text-slate-500">
-        Keep conversations and scheduled work organized in their own spaces.
-      </p>
+      <h1>让每项工作各得其所。</h1>
+      <p className="text-sm text-slate-500">用独立工作区整理会话和计划任务。</p>
       <div className="workspace-toolbar">
         <input
           type="search"
-          aria-label="Find workspaces"
+          aria-label="搜索工作区"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Find a workspace…"
+          placeholder="搜索工作区…"
         />
-        <span className="session-help">{workspaces.length} workspaces</span>
+        <span className="session-help">{workspaces.length} 个工作区</span>
       </div>
       {loadError !== null && (
         <p role="alert" className="text-sm text-red-600">
           {loadError}{' '}
           <button disabled={loading} className="underline" onClick={() => void reload()}>
-            {loading ? 'Retrying…' : 'Retry'}
+            {loading ? '重试中…' : '重试'}
           </button>
         </p>
       )}
@@ -152,7 +150,7 @@ export function WorkspacesPage() {
       )}
       {loading && (
         <p role="status" className="session-help">
-          Loading workspaces…
+          正在加载工作区…
         </p>
       )}
       <div className="workspace-list workspace-gallery">
@@ -184,7 +182,7 @@ export function WorkspacesPage() {
                   >
                     <input
                       value={renameValue}
-                      aria-label="Rename workspace"
+                      aria-label="重命名工作区"
                       maxLength={120}
                       disabled={busy || loading}
                       onChange={(e) => setRenameValue(e.target.value)}
@@ -195,7 +193,7 @@ export function WorkspacesPage() {
                       disabled={busy || loading || !renameValue.trim()}
                       className="rounded-md bg-slate-900 px-2 py-1 text-xs text-white"
                     >
-                      Save
+                      保存
                     </button>
                     <button
                       onClick={() => setRenaming(null)}
@@ -203,7 +201,7 @@ export function WorkspacesPage() {
                       disabled={busy || loading}
                       className="rounded-md border border-slate-300 px-2 py-1 text-xs"
                     >
-                      Cancel
+                      取消
                     </button>
                   </form>
                 ) : (
@@ -212,12 +210,12 @@ export function WorkspacesPage() {
                       {ws.displayName}
                       {ws.isHome && (
                         <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-                          Home — cannot be deleted
+                          个人工作区，不可删除
                         </span>
                       )}
                     </div>
                     <div className="truncate text-xs text-slate-400">
-                      {ws.folder} · created {new Date(ws.createdAt).toLocaleDateString()}
+                      {ws.folder} · 创建于 {new Date(ws.createdAt).toLocaleDateString()}
                     </div>
                   </>
                 )}
@@ -230,18 +228,18 @@ export function WorkspacesPage() {
                       setRenameValue(ws.displayName);
                     }}
                     disabled={ws.isHome || busy || loading}
-                    title={ws.isHome ? 'Rename not offered for Home' : undefined}
+                    title={ws.isHome ? '个人工作区暂不支持重命名' : undefined}
                     className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-40"
                   >
-                    Rename
+                    重命名
                   </button>
                   <ConfirmAction
-                    title={`Delete ${ws.displayName}?`}
+                    title={`删除“${ws.displayName}”？`}
                     onConfirm={() => remove(ws)}
                     disabled={ws.isHome || busy || loading}
                     className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40"
                   >
-                    This workspace will be removed. Home workspaces are protected.
+                    此工作区将被删除，个人工作区不受影响。
                   </ConfirmAction>
                 </div>
               )}
@@ -253,7 +251,7 @@ export function WorkspacesPage() {
           ws.displayName.toLowerCase().includes(query.trim().toLowerCase()),
         ).length === 0 && (
           <p className="session-help">
-            {query ? 'No matching workspaces.' : 'Create your first workspace below.'}
+            {query ? '没有匹配的工作区。' : '在下方创建你的第一个工作区。'}
           </p>
         )}
       <form
@@ -264,12 +262,12 @@ export function WorkspacesPage() {
         }}
       >
         <input
-          aria-label="New workspace name"
+          aria-label="新工作区名称"
           maxLength={120}
           disabled={busy || loading}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="New workspace name"
+          placeholder="新工作区名称"
           className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
         <button
@@ -277,7 +275,7 @@ export function WorkspacesPage() {
           disabled={busy || loading || displayName.trim().length === 0}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
-          Create workspace
+          创建工作区
         </button>
       </form>
     </div>

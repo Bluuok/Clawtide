@@ -28,7 +28,7 @@ export function SettingsPage() {
       setProvider(res.provider);
       setBaseUrl(res.provider.baseUrl);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not load provider settings.');
+      setError(err instanceof ApiError ? err.message : '无法加载模型服务设置。');
     } finally {
       setLoading(false);
     }
@@ -46,7 +46,7 @@ export function SettingsPage() {
       try {
         if (!['http:', 'https:'].includes(new URL(url).protocol)) throw new Error();
       } catch {
-        setError('Enter an HTTP or HTTPS address, or leave it blank to use the default.');
+        setError('请输入 HTTP 或 HTTPS 地址，留空则使用默认地址。');
         return;
       }
     }
@@ -61,11 +61,7 @@ export function SettingsPage() {
       setApiKey('');
       setSaved(true);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : 'Could not save settings. Your changes are still here.',
-      );
+      setError(err instanceof ApiError ? err.message : '保存设置失败，你的更改仍已保留。');
     } finally {
       setBusy(false);
     }
@@ -73,16 +69,12 @@ export function SettingsPage() {
 
   return (
     <div className="content-page settings-page space-y-4">
-      <h1>Connect your intelligence.</h1>
-      <p className="text-sm text-slate-600">
-        Choose the Anthropic-compatible endpoint your digital workers use.
-      </p>
+      <h1>连接模型服务。</h1>
+      <p className="text-sm text-slate-600">为数字员工配置兼容 Anthropic 的模型服务。</p>
       {!isAdmin ? (
         <div className="settings-card">
-          <h2>Managed by your administrator</h2>
-          <p className="session-help">
-            An administrator can change the provider for this installation.
-          </p>
+          <h2>由管理员管理</h2>
+          <p className="session-help">仅管理员可以修改当前应用的模型服务配置。</p>
         </div>
       ) : (
         <form
@@ -93,24 +85,23 @@ export function SettingsPage() {
           }}
         >
           <div className="settings-card-heading">
-            <span className="eyebrow">Model provider</span>
+            <span className="eyebrow">模型服务</span>
             <span className="settings-key-state">
               {loading
-                ? 'Loading…'
+                ? '加载中…'
                 : provider === null
-                  ? 'Unavailable'
+                  ? '暂不可用'
                   : provider.configured
-                    ? 'API key saved'
-                    : 'No saved API key'}
+                    ? 'API 密钥已保存'
+                    : '尚未保存 API 密钥'}
             </span>
           </div>
           <p className="session-help">
-            Changes apply on the next agent turn. A saved key does not confirm a successful
-            connection.
+            更改将在下一轮对话时生效。密钥已保存不代表连接已验证成功。
           </p>
           <fieldset disabled={loading || busy || provider === null} className="settings-fields">
             <label>
-              Base URL
+              接口地址（Base URL）
               <input
                 value={baseUrl}
                 maxLength={500}
@@ -121,9 +112,9 @@ export function SettingsPage() {
                 placeholder="https://api.anthropic.com"
               />
             </label>
-            <p className="session-help">Leave blank to use the default endpoint.</p>
+            <p className="session-help">留空则使用默认接口地址。</p>
             <label>
-              API key
+              API 密钥
               <input
                 type="password"
                 autoComplete="new-password"
@@ -133,42 +124,36 @@ export function SettingsPage() {
                   setApiKey(e.target.value);
                   setSaved(false);
                 }}
-                placeholder={
-                  provider?.configured
-                    ? 'Leave blank to keep your saved key'
-                    : 'Enter your API key'
-                }
+                placeholder={provider?.configured ? '留空以保留已保存的密钥' : '输入 API 密钥'}
               />
             </label>
-            <p className="session-help">
-              Your saved key is never displayed. Leaving this field blank keeps the current key.
-            </p>
+            <p className="session-help">已保存的密钥不会显示，留空将保留当前密钥。</p>
           </fieldset>
           {error && (
             <p role="alert" className="text-sm text-red-700">
               {error}{' '}
               {provider === null && (
                 <button type="button" className="underline" onClick={() => void load()}>
-                  Retry
+                  重试
                 </button>
               )}
             </p>
           )}
           {saved && (
             <p role="status" className="text-sm text-emerald-700">
-              Settings saved.
+              设置已保存。
             </p>
           )}
           <div className="settings-actions">
             <span className="session-help">
-              {dirty ? 'You have unsaved changes.' : 'Applies to this installation.'}
+              {dirty ? '你有未保存的更改。' : '设置对当前应用生效。'}
             </span>
             <button
               type="submit"
               disabled={!dirty || loading || busy}
               className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {busy ? 'Saving…' : 'Save changes'}
+              {busy ? '保存中…' : '保存更改'}
             </button>
           </div>
         </form>

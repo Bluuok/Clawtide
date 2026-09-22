@@ -10,11 +10,11 @@ import { useChat } from '../stores/chat.js';
 import { api, ApiError, type PublicUser } from '../api.js';
 
 const NAV = [
-  { to: '/chat', label: 'Chat' },
-  { to: '/profiles', label: 'Profiles' },
-  { to: '/tasks', label: 'Tasks' },
-  { to: '/workspaces', label: 'Workspaces' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/chat', icon: 'Chat', label: '会话' },
+  { to: '/profiles', icon: 'Profiles', label: '数字员工' },
+  { to: '/tasks', icon: 'Tasks', label: '任务' },
+  { to: '/workspaces', icon: 'Workspaces', label: '工作区' },
+  { to: '/settings', icon: 'Settings', label: '设置' },
 ];
 
 export function AppLayout() {
@@ -22,7 +22,7 @@ export function AppLayout() {
   const setUser = useSession((s) => s.setUser);
   const navigate = useNavigate();
   const location = useLocation();
-  const title = NAV.find((item) => location.pathname === item.to)?.label ?? 'Chat';
+  const title = NAV.find((item) => location.pathname === item.to)?.label ?? '会话';
   const socketStatus = useChat((s) => s.socketStatus);
   const reconnectAttempt = useChat((s) => s.reconnectAttempt);
   const connect = useChat((s) => s.connect);
@@ -56,7 +56,7 @@ export function AppLayout() {
         setUser(null);
         navigate('/login');
       } else {
-        setLogoutError('Could not confirm logout. Please try again.');
+        setLogoutError('无法确认退出状态，请重试。');
       }
     } finally {
       setLogoutBusy(false);
@@ -64,17 +64,17 @@ export function AppLayout() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" lang="zh-CN">
       <aside className="app-sidebar">
         <div className="brand">
           <TideMark />
           <span>clawtide</span>
         </div>
-        <div className="brand-subtitle">Digital worker studio</div>
-        <nav className="app-nav" aria-label="Primary navigation">
+        <div className="brand-subtitle">数字员工工作台</div>
+        <nav className="app-nav" aria-label="主导航">
           {NAV.map((item) => (
             <NavLink key={item.to} to={item.to} aria-label={item.label} title={item.label}>
-              <NavIcon name={item.label} />
+              <NavIcon name={item.icon} />
               <span>{item.label}</span>
             </NavLink>
           ))}
@@ -90,28 +90,28 @@ export function AppLayout() {
             </p>
           )}
           <button onClick={() => void logout()} disabled={logoutBusy} className="logout">
-            {logoutBusy ? 'Logging out…' : logoutError ? 'Retry log out' : 'Log out'}
+            {logoutBusy ? '正在退出…' : logoutError ? '重试退出' : '退出登录'}
           </button>
         </div>
       </aside>
       <main className="app-main">
         <header className="page-header">
           <div>
-            <span className="eyebrow">Your workspace / {title}</span>
-            <h1>{title === 'Chat' ? 'Room to think.' : title}</h1>
+            <span className="eyebrow">我的工作区 / {title}</span>
+            <h1>{title === '会话' ? '聊聊你的想法。' : title}</h1>
           </div>
           <span
             className={`connection-state ${socketStatus !== 'open' ? 'offline' : ''}`}
             role="status"
           >
-            {socketStatus === 'open' ? 'Connected' : 'Reconnecting'}
+            {socketStatus === 'open' ? '已连接' : '正在重连'}
           </span>
         </header>
         {socketStatus !== 'open' && (
           <div className="bg-amber-100 px-4 py-1.5 text-center text-xs text-amber-900">
             {socketStatus === 'connecting'
-              ? 'Connecting…'
-              : `Realtime link down — reconnecting (attempt ${reconnectAttempt + 1})…`}
+              ? '正在连接…'
+              : `实时连接已断开，正在进行第 ${reconnectAttempt + 1} 次重连…`}
           </div>
         )}
         <div className="page-outlet">

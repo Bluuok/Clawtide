@@ -1,3 +1,20 @@
+const taskLabels = {
+  active: '已启用',
+  paused: '已暂停',
+  queued: '排队中',
+  retry_wait: '等待重试',
+  running: '执行中',
+  success: '已完成',
+  failed: '失败',
+  missed: '已错过',
+  cancelled: '已取消',
+  cron: 'Cron 定时',
+  interval: '间隔重复',
+  once: '单次执行',
+  isolated: '独立上下文',
+  group: '工作区上下文',
+};
+
 /**
  * Tasks: per-workspace list, create (cron/interval/once × group/isolated),
  * pause/resume/delete, run-now (202 + runId, idempotent), and the runs
@@ -45,7 +62,7 @@ export function TasksPage() {
       setWorkspaces(ws);
       if (ws.length > 0) setWorkspaceId((prev) => prev || ws[0]!.id);
     })().catch(() => {
-      setError('Could not load workspaces. Please refresh to retry.');
+      setError('无法加载工作区，请刷新重试。');
       setLoading(false);
     });
   }, []);
@@ -77,7 +94,7 @@ export function TasksPage() {
       );
     } catch (err) {
       if (controller.signal.aborted || request !== requestId.current) return;
-      setError(err instanceof ApiError ? err.message : 'Could not load tasks.');
+      setError(err instanceof ApiError ? err.message : '无法加载任务。');
     } finally {
       if (!controller.signal.aborted && request === requestId.current) {
         setLoading(false);
@@ -100,7 +117,7 @@ export function TasksPage() {
       await fn();
       await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'action failed');
+      setError(err instanceof ApiError ? err.message : '操作失败');
     } finally {
       setBusy(false);
     }
@@ -111,16 +128,16 @@ export function TasksPage() {
       <div className="list-panel tasks-sidebar">
         <div className="task-filters">
           <div className="flex items-center justify-between">
-            <span className="eyebrow">Scheduled work</span>
+            <span className="eyebrow">计划任务</span>
             {tasksLastUpdated && (
               <span className="text-[10px] text-slate-400">
-                Updated {tasksLastUpdated.toLocaleTimeString()}
+                更新于 {tasksLastUpdated.toLocaleTimeString()}
               </span>
             )}
           </div>
           <select
             value={workspaceId}
-            aria-label="Task workspace"
+            aria-label="任务所属工作区"
             disabled={busy}
             onChange={(e) => {
               requestId.current++;
@@ -140,25 +157,25 @@ export function TasksPage() {
           </select>
           <input
             type="search"
-            aria-label="Find tasks"
-            placeholder="Find a task…"
+            aria-label="搜索任务"
+            placeholder="搜索任务…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <select
-            aria-label="Filter tasks by status"
+            aria-label="按状态筛选任务"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           >
-            <option value="all">All tasks</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
+            <option value="all">全部任务</option>
+            <option value="active">已启用</option>
+            <option value="paused">已暂停</option>
           </select>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading && (
             <p className="session-help" role="status">
-              Loading tasks…
+              正在加载任务…
             </p>
           )}
           {visibleTasks.map((t) => (
@@ -173,18 +190,16 @@ export function TasksPage() {
             >
               <span className="block truncate">{t.prompt}</span>
               <span className="block text-xs text-slate-400">
-                {t.scheduleType} · {t.contextMode} ·{' '}
+                {taskLabels[t.scheduleType]} · {taskLabels[t.contextMode]} ·{' '}
                 <span className={t.status === 'active' ? 'text-emerald-600' : 'text-amber-600'}>
-                  {t.status}
+                  {taskLabels[t.status]}
                 </span>
               </span>
             </button>
           ))}
           {!loading && !error && visibleTasks.length === 0 && (
             <div className="p-4 text-center text-sm text-slate-400">
-              {tasks.length === 0
-                ? 'No tasks in this workspace.'
-                : 'No tasks match your filters.'}
+              {tasks.length === 0 ? '此工作区暂无任务。' : '没有符合筛选条件的任务。'}
             </div>
           )}
         </div>
@@ -210,12 +225,12 @@ export function TasksPage() {
                 className="font-medium underline hover:text-red-900"
                 onClick={() => void reload()}
               >
-                Retry
+                重试
               </button>
             </div>
             {tasksLastUpdated && (
               <p className="mt-1 text-xs text-red-600/80">
-                Showing tasks cached from {tasksLastUpdated.toLocaleTimeString()}.
+                当前显示的任务缓存时间为 {tasksLastUpdated.toLocaleTimeString()}.
               </p>
             )}
           </div>
@@ -233,8 +248,8 @@ export function TasksPage() {
           />
         ) : (
           <div className={tasks.length === 0 ? 'tasks-empty-detail' : undefined}>
-            <EmptyState title="Give good work a rhythm." art="stones">
-              Select a task to see its schedule and run history, or create something new.
+            <EmptyState title="让工作有条不紊。" art="stones">
+              选择任务查看计划和执行历史，或创建一个新任务。
             </EmptyState>
           </div>
         )}
@@ -264,18 +279,18 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
     if (busy) return;
     setError(null);
     if (!prompt.trim()) {
-      setError('Describe what this task should do.');
+      setError('请描述任务需要完成的工作。');
       return;
     }
     if (
       scheduleType === 'interval' &&
       (!Number.isInteger(intervalSeconds) || intervalSeconds < 60)
     ) {
-      setError('Choose an interval of at least 60 whole seconds.');
+      setError('请输入至少 60 秒的整数间隔。');
       return;
     }
     if (scheduleType === 'cron' && ![5, 6].includes(cronExpr.trim().split(/\s+/).length)) {
-      setError('Enter a cron expression with 5 or 6 fields.');
+      setError('请输入包含 5 或 6 个字段的 Cron 表达式。');
       return;
     }
     if (
@@ -284,7 +299,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
         !Number.isFinite(new Date(runAt).getTime()) ||
         new Date(runAt).getTime() <= Date.now())
     ) {
-      setError('Choose a date and time in the future.');
+      setError('请选择未来的日期和时间。');
       return;
     }
     setBusy(true);
@@ -302,7 +317,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
       setPrompt('');
       props.onCreated(task);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'create failed');
+      setError(err instanceof ApiError ? err.message : '创建失败');
     } finally {
       setBusy(false);
     }
@@ -318,7 +333,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
         disabled={props.workspaceId === ''}
         className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50"
       >
-        + New task
+        + 新建任务
       </button>
       <dialog
         ref={dialog}
@@ -336,22 +351,22 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
             void create();
           }}
         >
-          <span className="eyebrow">Make progress a habit</span>
-          <h2 id="new-task-heading">Create a task.</h2>
-          <p className="session-help">Describe the work and choose when it should happen.</p>
+          <span className="eyebrow">让进步成为习惯</span>
+          <h2 id="new-task-heading">创建任务。</h2>
+          <p className="session-help">描述工作内容，并选择执行时间。</p>
           <fieldset disabled={busy} className="task-fields">
-            <label htmlFor="task-prompt">What should your worker do?</label>
+            <label htmlFor="task-prompt">你希望数字员工做什么？</label>
             <textarea
               id="task-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
-              placeholder="Prompt to execute"
+              placeholder="任务指令"
               className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             />
             <div className="flex gap-2">
               <select
-                aria-label="Schedule type"
+                aria-label="执行计划"
                 value={scheduleType}
                 onChange={(e) => {
                   setScheduleType(e.target.value as typeof scheduleType);
@@ -359,37 +374,37 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
                 }}
                 className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs"
               >
-                <option value="interval">Repeat at an interval</option>
-                <option value="cron">Cron schedule (UTC)</option>
-                <option value="once">Run once</option>
+                <option value="interval">按间隔重复</option>
+                <option value="cron">Cron 定时（UTC）</option>
+                <option value="once">执行一次</option>
               </select>
               <select
-                aria-label="Task context"
+                aria-label="会话上下文"
                 value={contextMode}
                 onChange={(e) => setContextMode(e.target.value as typeof contextMode)}
                 className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs"
               >
-                <option value="isolated">Fresh context</option>
-                <option value="group">Workspace context</option>
+                <option value="isolated">独立上下文</option>
+                <option value="group">工作区上下文</option>
               </select>
             </div>
             <p className="session-help">
               {contextMode === 'isolated'
-                ? 'Each run starts with a fresh conversation.'
-                : 'Runs use the workspace conversation context.'}
+                ? '每次执行都会开始一段新会话。'
+                : '执行时使用工作区的会话上下文。'}
             </p>
             {scheduleType === 'cron' && (
               <input
-                aria-label="Cron expression (UTC)"
+                aria-label="Cron 表达式（UTC）"
                 value={cronExpr}
                 onChange={(e) => setCronExpr(e.target.value)}
-                placeholder="cron expression (UTC)"
+                placeholder="Cron 表达式（UTC）"
                 className="w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs"
               />
             )}
             {scheduleType === 'interval' && (
               <label className="block text-xs text-slate-600">
-                Interval seconds (≥ 60)
+                间隔秒数（≥ 60）
                 <input
                   type="number"
                   min={60}
@@ -401,7 +416,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
             )}
             {scheduleType === 'once' && (
               <label>
-                Run at (your local time)
+                执行时间（本地时间）
                 <input
                   type="datetime-local"
                   value={runAt}
@@ -412,7 +427,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
             )}
             {scheduleType === 'cron' && (
               <p className="session-help">
-                Cron uses UTC. Example: 0 9 * * * runs daily at 09:00 UTC.
+                Cron 使用 UTC 时区。例如：0 9 * * * 表示每天 UTC 09:00 执行。
               </p>
             )}
           </fieldset>
@@ -427,7 +442,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
               disabled={busy || prompt.trim().length === 0}
               className="flex-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
-              {busy ? 'Creating…' : 'Create'}
+              {busy ? '创建中…' : '创建'}
             </button>
             <button
               onClick={() => setOpen(false)}
@@ -435,7 +450,7 @@ function NewTaskButton(props: { workspaceId: string; onCreated: (task: Task) => 
               disabled={busy}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-100"
             >
-              Cancel
+              取消
             </button>
           </div>
         </form>
@@ -504,35 +519,35 @@ function TaskDetail(props: {
                 : 'bg-amber-100 text-amber-800'
             }`}
           >
-            {t.status}
+            {taskLabels[t.status]}
           </span>
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600">
           <div>
-            <dt className="inline font-medium">schedule: </dt>
+            <dt className="inline font-medium">执行计划： </dt>
             <dd className="inline">
-              {t.scheduleType} (
+              {taskLabels[t.scheduleType]} (
               {t.scheduleType === 'cron'
                 ? t.cronExpr
                 : t.scheduleType === 'interval'
-                  ? `${t.intervalSeconds}s`
+                  ? `${t.intervalSeconds} 秒`
                   : t.runAt
                     ? new Date(t.runAt).toLocaleString()
                     : '—'}
               {t.scheduleType === 'cron'
                 ? ' UTC'
                 : t.scheduleType === 'once'
-                  ? ' local time'
+                  ? ' 本地时间'
                   : ''}
               )
             </dd>
           </div>
           <div>
-            <dt className="inline font-medium">context: </dt>
-            <dd className="inline">{t.contextMode}</dd>
+            <dt className="inline font-medium">上下文： </dt>
+            <dd className="inline">{taskLabels[t.contextMode]}</dd>
           </div>
           <div className="col-span-2">
-            <dt className="inline font-medium">created: </dt>
+            <dt className="inline font-medium">创建于： </dt>
             <dd className="inline">{new Date(t.createdAt).toLocaleString()}</dd>
           </div>
         </dl>
@@ -543,7 +558,7 @@ function TaskDetail(props: {
               onClick={() => void props.onAct(() => api.post(`/tasks/${t.id}/pause`))}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
             >
-              Pause
+              暂停
             </button>
           ) : (
             <button
@@ -551,7 +566,7 @@ function TaskDetail(props: {
               onClick={() => void props.onAct(() => api.post(`/tasks/${t.id}/resume`))}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
             >
-              Resume
+              恢复
             </button>
           )}
           <button
@@ -562,7 +577,7 @@ function TaskDetail(props: {
                   .then((res) => {
                     if (!followerRef.current) return;
                     setNotice(
-                      res.queued ? `Queued (run ${res.runId ?? ''})` : 'Task not active',
+                      res.queued ? `已排队（执行记录 ${res.runId ?? ''}）` : '任务未启用',
                     );
                     followerRef.current.refresh(res.runId);
                   }),
@@ -571,21 +586,21 @@ function TaskDetail(props: {
             disabled={props.busy || t.status !== 'active'}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            Run now
+            立即执行
           </button>
           <ConfirmAction
-            title="Delete this task?"
+            title="删除此任务？"
             onConfirm={props.onDelete}
             disabled={props.busy}
             className="rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
           >
-            This task will be removed. This action cannot be undone.
+            此任务将被删除，操作无法撤销。
           </ConfirmAction>
           <button
             onClick={() => void loadRuns()}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
           >
-            Refresh runs
+            刷新执行记录
           </button>
         </div>
         {notice && (
@@ -596,40 +611,40 @@ function TaskDetail(props: {
       </div>
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Runs history
+          执行历史
         </div>
         {lastUpdated && (
           <p className="mb-2 text-xs text-slate-500">
-            Updated {lastUpdated.toLocaleTimeString()}
+            更新于 {lastUpdated.toLocaleTimeString()}
           </p>
         )}
         {runsError && (
           <p role="alert" className="text-sm text-red-700">
             {runsError}{' '}
             <button className="underline" onClick={() => void loadRuns()}>
-              Retry history
+              重新加载历史
             </button>
           </p>
         )}
         {runs === null ? (
-          <div className="text-sm text-slate-400">Loading…</div>
+          <div className="text-sm text-slate-400">加载中…</div>
         ) : runs.length === 0 ? (
-          <div className="text-sm text-slate-400">No runs yet.</div>
+          <div className="text-sm text-slate-400">暂无执行记录。</div>
         ) : (
           <table className="task-run-table w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
-                <th className="py-1 pr-2">status</th>
-                <th className="py-1 pr-2">attempt</th>
-                <th className="py-1 pr-2">available</th>
-                <th className="py-1 pr-2">finished</th>
-                <th className="py-1">result / error</th>
+                <th className="py-1 pr-2">状态</th>
+                <th className="py-1 pr-2">尝试次数</th>
+                <th className="py-1 pr-2">可执行时间</th>
+                <th className="py-1 pr-2">完成时间</th>
+                <th className="py-1">结果 / 错误</th>
               </tr>
             </thead>
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 align-top">
-                  <td data-label="Status" className="py-1.5 pr-2">
+                  <td data-label="状态" className="py-1.5 pr-2">
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs ${
                         r.status === 'success'
@@ -641,23 +656,26 @@ function TaskDetail(props: {
                               : 'bg-slate-100 text-slate-700'
                       }`}
                     >
-                      {r.status}
+                      {taskLabels[r.status]}
                     </span>
                   </td>
-                  <td data-label="Attempt" className="py-1.5 pr-2">
+                  <td data-label="尝试次数" className="py-1.5 pr-2">
                     {r.attempt}
                   </td>
-                  <td data-label="Available" className="py-1.5 pr-2 text-xs text-slate-500">
+                  <td data-label="可执行时间" className="py-1.5 pr-2 text-xs text-slate-500">
                     {new Date(r.availableAt).toLocaleString()}
                   </td>
-                  <td data-label="Finished" className="py-1.5 pr-2 text-xs text-slate-500">
+                  <td data-label="完成时间" className="py-1.5 pr-2 text-xs text-slate-500">
                     {r.finishedAt ? new Date(r.finishedAt).toLocaleString() : '—'}
                   </td>
                   <td
-                    data-label="Result / error"
+                    data-label="结果 / 错误"
                     className="min-w-0 break-words py-1.5 text-xs text-slate-600"
                   >
-                    <RunResult key={`${r.id}-${r.status}`} text={r.error ?? r.result} />
+                    <RunResult
+                      key={`${r.id}-${taskLabels[r.status]}`}
+                      text={r.error ?? r.result}
+                    />
                   </td>
                 </tr>
               ))}
@@ -671,7 +689,7 @@ function TaskDetail(props: {
 
 function RunResult({ text }: { text: string | null }) {
   const [expanded, setExpanded] = useState(false);
-  const [copyState, setCopyState] = useState('Copy result');
+  const [copyState, setCopyState] = useState('复制结果');
   if (text === null) return <>—</>;
   return (
     <div className="task-result">
@@ -682,21 +700,21 @@ function RunResult({ text }: { text: string | null }) {
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? 'Collapse result' : 'Expand result'}
+          {expanded ? '收起结果' : '展开结果'}
         </button>
         <button
           className="underline"
           onClick={() => {
             void navigator.clipboard.writeText(text).then(
-              () => setCopyState('Copied'),
-              () => setCopyState('Copy unavailable'),
+              () => setCopyState('已复制'),
+              () => setCopyState('复制失败'),
             );
           }}
         >
           {copyState}
         </button>
         <span className="sr-only" role="status">
-          {copyState === 'Copy result' ? '' : copyState}
+          {copyState === '复制结果' ? '' : copyState}
         </span>
       </div>
     </div>

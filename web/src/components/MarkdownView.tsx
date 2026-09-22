@@ -26,14 +26,14 @@ function CodeBlock({
     <div className="group relative my-2 overflow-hidden rounded-md border border-slate-700 bg-slate-900 text-slate-100">
       <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-400">
         <span className="font-mono">
-          {className ? className.replace(/^language-/, '') : 'code'}
+          {className ? className.replace(/^language-/, '') : '代码'}
         </span>
         <button
           type="button"
           onClick={() => void copy()}
           className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-white"
         >
-          {copied ? 'Copied ✓' : 'Copy'}
+          {copied ? '已复制 ✓' : '复制'}
         </button>
       </div>
       <pre className="max-w-full overflow-x-auto p-3 font-mono text-xs leading-relaxed text-slate-100">
